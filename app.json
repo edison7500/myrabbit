@@ -2,7 +2,7 @@
   "expo": {
     "name": "MyRabbit",
     "slug": "myrabbit",
-    "version": "1.0.0",
+    "version": "0.1",
     "orientation": "portrait",
     "icon": "./assets/images/myrabbit-logo.png",
     "scheme": "myrabbit",
@@ -10,14 +10,16 @@
     "ios": {
       "icon": "./assets/images/myrabbit-logo.png",
       "bundleIdentifier": "im.jiaxin.myrabbit",
-      "appleTeamId": "U644HLL3MX"
+      "appleTeamId": "U644HLL3MX",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#212121",
         "foregroundImage": "./assets/images/myrabbit-logo.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 1
     },
     "web": {
       "output": "static",

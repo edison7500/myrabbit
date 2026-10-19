@@ -1,75 +1,97 @@
-# MyRabbit
+<p align="center">
+  <img src="assets/images/myrabbit-logo.png" width="160" alt="MyRabbit logo" />
+</p>
 
-A lightweight mobile client for Rybbit, designed to connect directly to cloud or self-hosted instances. Built with Expo, React Native, TypeScript and Expo Router.
+<h1 align="center">MyRabbit</h1>
+
+<p align="center">A lightweight Rybbit analytics client for iOS and Android.<br />Connect directly to Rybbit Cloud or your self-hosted instance.</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v0.1_Preview-8B5CF6" alt="Version: v0.1 Preview" />
+  <a href="https://docs.expo.dev/versions/v57.0.0/"><img src="https://img.shields.io/badge/Expo-SDK_57-000020" alt="Expo SDK 57" /></a>
+  <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React_Native-0.86.3-61DAFB" alt="React Native 0.86.3" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6.0-3178C6" alt="TypeScript 6.0" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License" /></a>
+</p>
+
+## Overview
+
+MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your phone: check key metrics, explore traffic, and see recent visitor activity. It communicates directly with your configured Rybbit server, with no MyRabbit backend or proxy.
+
+**v0.1 Preview** is the current development milestone, not a published release. Public build and download links will be added here when available.
+
+## Features
+
+- **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges.
+- **Traffic exploration:** visitor/pageview charts, referrers, content, technology, locations, events, and a weekly trends heatmap, with detailed rankings.
+- **Realtime activity:** the latest 100 sessions from the last 30 minutes, expandable visitor details, and refreshes every 30 seconds while visible and active.
+- **Cloud and self-hosted connections:** test your server URL and API key before saving, then switch between accessible sites. One saved connection is supported at a time.
+- **Appearance:** Light, Dark, or Auto to follow your device.
+- **Local credential storage:** API keys stay in SecureStore on iOS and Android. Browser previews keep credentials in memory only and require reconnecting after refresh.
+
+## Screenshots
+
+Screenshots will be added before public builds are available.
+
+| Dashboard | Explore | Realtime |
+| --- | --- | --- |
+| Coming soon | Coming soon | Coming soon |
+
+## Getting Started
+
+1. Open your Rybbit web interface (Cloud or self-hosted) and create an API key in its settings. See Rybbit’s [API key guide](https://rybbit.com/docs/api/getting-started). The key needs access to organization/site discovery and analytics reads.
+2. Build and launch MyRabbit using the development commands below. On the startup screen, tap **Add a site**, choose Cloud or enter your self-hosted server URL, and paste the API key.
+3. Tap **Test Connection**, then **Save & Continue** after verification. MyRabbit opens the first accessible site; use the site switcher to choose another.
+
+You need an existing Rybbit site with analytics data. MyRabbit does not create server-side sites or sign in with a username/password. Removing a connection clears only local credentials and site selection; your Rybbit sites and analytics remain on the server. Self-hosted API availability varies by server version; browser previews also require server CORS support.
+
+## Tech Stack
+
+Versions below match the dependency declarations in [package.json](package.json); exact resolutions are recorded in [package-lock.json](package-lock.json).
+
+| Component | Library / version |
+| --- | --- |
+| App framework | Expo SDK 57 (`~57.0.23`) |
+| UI runtime | React Native `0.86.3` · React `19.2.3` |
+| Language | TypeScript `~6.0.3` (strict mode) |
+| Navigation | Expo Router `~57.0.19` |
+| Icons | Lucide React Native `^1.41.0` · React Native SVG `15.15.4` |
+| Native UI | `@expo/ui` `~57.0.16` · Expo Glass Effect `~57.0.1` |
+| Motion | React Native Reanimated `4.5.1` · Gesture Handler `~2.32.0` |
+| Storage | Expo SecureStore `~57.0.3` · AsyncStorage `2.2.0` (non-sensitive preferences and metadata) |
 
 ## Development
 
-Use Node.js 24 LTS and npm. Dependency versions are pinned by `package-lock.json`.
+Use Node.js 24 LTS and npm:
 
 ```sh
 npm ci
 npm start
 ```
 
-- `npm run ios` — open with an iOS simulator (requires macOS and Xcode).
-- `npm run android` — open with an Android emulator (requires Android SDK).
-- `npm run web` — browser preview.
-- `npm run typecheck` — TypeScript checks.
-- `npm run lint` — ESLint checks.
-- `npm run export` — bundle iOS, Android and static web assets.
-
-Use an Expo Go version compatible with the installed Expo SDK, or a development build.
-
-For an iPhone build that launches without Metro, run `npx expo run:ios --device --configuration Release`. Debug builds require the development server (`npm start`) to remain reachable from the phone. The local `with-ios-script-sandboxing` config plugin disables Xcode User Script Sandboxing for the app project so Metro can read project files and write the embedded Release JS bundle. After adding or changing this plugin, run `npx expo prebuild --platform ios --no-install` to apply it before building from Xcode.
-
-For **Xcode Debug on a physical iPhone**, start Metro with `npm start -- --lan --port 8081` before pressing Run, keep it running, and connect the phone and Mac to the same reachable local network. A USB connection alone does not supply the JS bundle. If launch reports `No script URL provided` / `unsanitizedScriptURLString = (null)`, open `http://<Mac-LAN-IP>:8081/status` in Safari on the phone; it should show `packager-status:running`. If it cannot connect, check MyRabbit's Local Network permission in iOS Settings and any VPN/firewall blocking the connection. If the Mac's IP or Metro port has changed, rebuild the Debug app so its embedded `ip.txt` / `RCTMetroPort` match, then stop and relaunch it. For simulator-only development, Metro can use `npm start -- --localhost --port 8081`. Use a Release build when the app must launch with Metro stopped; switching Xcode's Run configuration to Release embeds the JS bundle during the build.
-
-Xcode 27 requires the UIKit scene lifecycle at launch. This SDK 57 project uses Expo 57.0.23 or newer with `expo-build-properties` and `ios.enableSceneSupport: true`, as described in the [versioned Expo documentation](https://docs.expo.dev/versions/v57.0.0/sdk/build-properties/#pluginconfigtypeios). After updating dependencies, run `npx expo prebuild --platform ios`, then rebuild the app from `ios/MyRabbit.xcworkspace` (or use `npm run ios`). Prebuild updates the generated AppDelegate and scene manifest; rebuilding an older generated project can succeed but crash immediately with “UIScene life cycle is required”.
-
-For Xcode 27.1 / Swift 6.4, `expo-build-properties` sets `ios.usePrecompiledModules: false` so Expo modules compile with the active toolchain. The SDK 57 precompiled Swift 6.3.1 modules can fail to import with `cannot find type '__ObjC::expo' in scope` followed by an `ExpoModulesCore` compiler/SDK mismatch. Apply this setting with `npx expo prebuild --platform ios` before rebuilding Release. The first native build takes longer because Expo modules are built from source; React Native's prebuilt core remains enabled.
-
-After switching Xcode/SDK versions, ExpoModulesJSI may also reuse an incompatible cached framework even when the Swift version is unchanged ([upstream issue](https://github.com/expo/expo/issues/50365)). After prebuild/Pod installation, rebuild its device slice with Expo's own script before building the app:
-
 ```sh
-PODS_ROOT="$PWD/ios/Pods" PLATFORM_NAME=iphoneos bash node_modules/expo-modules-jsi/apple/scripts/build-xcframework.sh --clean
+npm run ios        # Local iOS build (macOS + Xcode)
+npm run android    # Local Android build (Android SDK)
+npm run web        # Browser preview
+npm test           # Focused tests
+npm run typecheck
+npm run lint
+npm run export     # Bundle iOS, Android, and static web
 ```
 
-Use `PLATFORM_NAME=iphonesimulator` instead when targeting a simulator. This regenerates JSI build artifacts without editing generated interfaces or dependency source files.
+Native builds are required to verify the final app icon and launch screen. For environment setup, Expo prebuild, Release builds, Metro, and Xcode troubleshooting, see the [development guide](docs/DEVELOPMENT.md).
 
-## Connection flow
+## Documentation
 
-Configure your Cloud or self-hosted Server URL and API key, tap **Test Connection**, then **Save & Continue** after verification. Editing any connection field requires a new test. Failed tests leave the saved connection unchanged. Select an accessible site to open its Dashboard with six overview metrics from Rybbit. KPI cards show the change from the preceding equal-length period when a valid baseline is available; comparison failures leave current metrics visible without a change value. The Dashboard date selector mirrors Rybbit Web’s current presets, supports an inclusive custom range, and uses the device IANA timezone. Pull down to refresh the metrics for the selected range. Tap the Unique Users card to open its portrait detail with a wide trend chart; expand the chart to view it sideways without rotating the app UI. Both Visitors views use a violet current-period line with a fading area fill. Today adds a muted gray solid Yesterday comparison at matching hours. Today always spans 00:00–24:00, even early in the day or when the server returns only a few buckets. Hourly values are plotted at the end of their interval: at 21:30 the 21:00–22:00 interval is dashed without fill, completed intervals remain solid with fill, and later hours stay empty. The interval boundary uses the selected analytics timezone; Yesterday retains its full-day comparison. Tap a Visitors or Traffic detail chart to inspect exact bucket values. Today readouts show the hourly interval and identify its in-progress bucket; future intervals cannot be selected. Screen readers can increment or decrement the selected bucket, and the web preview supports arrow keys. Chart inspection is static and the expanded chart opens without an added fade. Returning keeps the active site and date range. Tap the site name in the Dashboard header, or use **Switch site** in Settings, to choose another site.
+- [Development, architecture, builds, troubleshooting, and testing](docs/DEVELOPMENT.md)
+- [Rybbit API client and response contracts](src/api/rybbit/README.md)
+- [Local storage boundaries](src/storage/README.md)
+- [Session restoration and site selection](src/stores/README.md)
 
-Connection setup and site selection share one Settings modal with an internal navigation stack. Without a selected site, the main page stays visible and offers **Add a site**, which opens connection setup. A saved connection with no selected site loads its accessible sites and automatically opens the first site’s Dashboard. **Save & Continue** saves the verified connection, closes the entire modal and returns to the main page, which performs this discovery. The site list is only shown inside the Settings modal for switching or managing sites. An empty server shows a main-page empty state with refresh, **Add a site** and **Manage sites** actions; saving a connection does not create a server-side Rybbit site. No startup modal opens automatically. Editing the connection and going back use the inner stack. Closing the modal returns to the underlying app when a site is selected, or to the startup screen otherwise. Choosing a site closes the entire modal and opens its Dashboard. Connection setup shows the saved connection; tap it to edit, or use **Add +** at the bottom to open a blank connection form. MyRabbit currently saves one connection, so saving an added connection replaces the existing one after verification. On the Connection setup screen, swipe left on **Saved connection** to reveal **Remove**. Confirming removes only the API URL/key saved on this device (or in browser memory) and the local selected-site record. Rybbit sites and analytics data remain on the server, and the server-side API key is not revoked. Site rows only open Dashboards. Browser previews also provide a visible remove button. Local storage failures show an error and allow retry; no server deletion request is sent.
+## License
 
-Settings displays the current site’s favicon from the configured Rybbit server’s public `/api/favicon?domain=…` endpoint, without sending an API key or cookies. Missing icons, older servers, and load failures retain the Globe fallback. Native credentials are stored in SecureStore. Browser previews retain credentials only in memory, so refresh requires reconnecting. The selected site ID and non-sensitive display metadata are stored separately in AsyncStorage. Startup validates that saved site against the accessible site list and opens its Dashboard when it remains available; temporary server failures preserve the saved selection. Saving a new connection clears the selection. Explore contains the Visitors/Pageviews Traffic chart and the first five Referrers for the shared site and date range. Explore also includes Content (Pages, Titles, Entries, Exits, Hostnames), Technology (Browsers, Devices, Operating Systems, Screen Dimensions), Locations (Countries, Regions, Cities, Languages, Timezones), Events (Custom Events, Outbound, Buttons, Forms, Copies), and Weekly Trends. Every ranking section previews at most five rows. The right-side chevron opens a detail page with the selected category and all available rows, including every API page. Weekly Trends displays its full 24-hour heatmap directly in Explore, without a chevron or detail page. Explore section titles use muted gray Lucide icons (ChartSpline for Traffic) and stick below the navigation bar while scrolling, with the next section replacing the previous header. Explore’s navigation title is the site switcher, with the date picker on the right; custom dates open in a bottom sheet. Dashboard retains its in-page controls. Weekly Trends averages hourly buckets by weekday and hour in the selected timezone, with six metrics and tappable cells. Missing hourly metrics are shown as unavailable. All charts share the selected range and filters, refresh on pull, retry independently, and retain successful results when a refresh fails. Tap Explore’s Traffic heading or chart to open its Visitors/Pageviews detail. Tap the Referrers heading to open the full paginated list. Realtime displays the latest 100 sessions from the last 30 minutes in a responsive visitor table, with device, country, pageview/event counts, source, entry/latest pages, start time and duration. Tap a row to expand its details. It refreshes every 30 seconds while the tab is visible and the app is active; pull down or tap the refresh button on the right of the Realtime navigation bar to update manually. The navigation button has no background and its refresh icon rotates while loading (static when Reduce Motion is enabled); only an explicit pull-to-refresh gesture shows the native pull indicator. Automatic and navigation-button refreshes do not trigger the pull animation. Failed refreshes retain the last successful result. Green dots indicate activity within five minutes, not a guaranteed live connection. Rybbit’s timezone-less session timestamps are interpreted as UTC before displaying them in the selected analytics timezone. Anonymous visitor names are generated locally from the visitor ID and may differ from Rybbit Web. Country flags appear beside country codes; unknown locations retain a text fallback. Flags use Unicode country symbols, with rendering dependent on the platform. Application UI icons and visitor avatars continue to use Lucide.
+[MIT](LICENSE). Existing copyright and license notices are preserved.
 
-Requests go directly to Rybbit using Bearer authentication, without browser cookies. The key needs organization/site read access and analytics read access. Browser previews also require the server to allow cross-origin API requests.
+## Disclaimer
 
-## Structure
-
-- `src/app/`: Expo Router layouts and thin route files
-- `src/features/`: Connection setup, site selection and app sections
-- `src/api/rybbit/`: API client and response validation
-- `src/storage/`: Platform-specific credential storage
-- `src/stores/`: Connection restoration and current site metadata
-
-## UI baseline
-
-The app icon, launch screen, and web favicon use `assets/images/myrabbit-logo.png`. The native launch screen keeps the centered rabbit logo visible while the saved appearance, connection and site restore, then opens the app. Native icon and launch-screen changes require rebuilding the app; Expo Go does not preview the final native branding. Verify launch branding with a Release build (`npx expo run:ios --configuration Release`), since development builds can show Expo loading UI.
-
-Selected tab bar icons and labels use violet; inactive tabs use gray. Navigation, native pickers, sheets, keyboards, charts and the status bar follow the selected appearance.
-
-Initial analytics, chart, realtime, referrer, and site-list loads show pulsing skeletons shaped like their content. With reduced motion enabled, the placeholders stay still. Pull-to-refresh keeps loaded content visible while updating.
-
-In **Settings → Appearance → Theme**, choose **Auto**, **Light**, or **Dark**. Auto is the default and follows system appearance changes, including after returning from a fixed mode. Your choice is stored separately in AsyncStorage on native and web and restored before revealing the app. Changing appearance preserves the active site, date range, loaded data and chart inspection. Storage failures retain the active mode and show a retryable error in Settings; they do not affect credentials. Light uses pale gray backgrounds, white cards and a darker violet accent. Dark retains the Soft Dark `#212121` background, `#2C2C2E` opaque cards, subtly elevated gray controls, and restrained `#A78BFA` violet accent. The native launch screen follows the system until JavaScript restores a saved override; native appearance/launch configuration changes require rebuilding. Colors, spacing, typography, corner radii and layout dimensions live in `src/constants/theme.ts`; shared surfaces, metric cards and section headings live in `src/components/analytics-ui.tsx`. Dashboard metrics use a compact two-column grid with tabular numbers and explicit previous-period comparisons when available. At larger system text sizes, metrics and inline date controls stack vertically. The floating tab bar retains the existing iOS 26 navigation baseline and uses native Liquid Glass when supported. Reduce Transparency and unavailable glass APIs use an opaque fallback matching the active theme. UI icons use `lucide-react-native` with Expo-compatible `react-native-svg`; native hosting controls and Settings rows use `@expo/ui`. On iOS, Settings action rows size to their content and scroll with the page and privacy note. This design baseline does not change the minimum supported OS version.
-
-## Tests
-
-Run `npm test` for focused request, connection validation, storage-boundary and Dashboard tests, plus `npm run typecheck`, `npm run lint` and `npm run export` for project validation. Tests use synthetic credentials and mocked network/platform boundaries; they do not contact your server or access your real Keychain.
-
-Connection testing makes one authenticated `GET /api/organizations` request with a 10-second timeout. It distinguishes invalid URLs, network failures, timeouts, 401/403, unexpected payloads and server errors. Successful validation confirms this endpoint is accessible, not every analytics permission. Web networking may require server CORS configuration.
-
-The blue floating gear in Expo Go is the development menu's **Tools button**, not a MyRabbit settings control. Hide it in the Expo developer menu by turning off **Tools button**. MyRabbit's settings entry is the bottom Settings tab; no floating settings control is rendered by the app.
-
-All four tabs share a persistent native navigation bar. Switching tabs updates only its title. On iOS, the bottom tabs use a floating glass surface when supported; Web uses a matching translucent surface, while Android keeps its standard bottom bar. Tab content stays clear of the floating bar and safe areas; standalone connection screens retain their own safe-area padding.
+MyRabbit is an independent, unofficial Rybbit client. It is not affiliated with or endorsed by Rybbit. Rybbit names and marks belong to their respective owners.
