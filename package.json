@@ -38,7 +38,9 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
+    "android:release": "expo run:android --variant release --device --no-bundler",
     "ios": "expo run:ios",
+    "ios:release": "expo run:ios --configuration Release --device --no-bundler",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",

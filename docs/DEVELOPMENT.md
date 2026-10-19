@@ -16,7 +16,9 @@ npm start
 ```
 
 - `npm run ios` — open with an iOS simulator (requires macOS and Xcode).
+- `npm run ios:release` — select an iOS device and build/install Release with the JS bundle embedded; Metro is not started.
 - `npm run android` — open with an Android emulator (requires Android SDK).
+- `npm run android:release` — select an Android device/emulator and build/install Release with the JS bundle embedded; Metro is not started (requires Android SDK).
 - `npm run web` — browser preview.
 - `npm run typecheck` — TypeScript checks.
 - `npm run lint` — ESLint checks.
@@ -48,7 +50,7 @@ See also the focused [API documentation](../src/api/rybbit/README.md), [storage 
 
 `npm run ios` and `npm run android` generate native projects as needed and build locally. iOS requires macOS and Xcode; Android requires a configured Android SDK and an emulator or connected device. The generated `ios/` and `android/` directories are ignored by Git. Keep native configuration in `app.json` and config plugins, then apply it through Expo prebuild.
 
-For an iPhone build that launches without Metro, run `npx expo run:ios --device --configuration Release`. Debug builds require the development server (`npm start`) to remain reachable from the phone. The local `with-ios-script-sandboxing` config plugin disables Xcode User Script Sandboxing for the app project so Metro can read project files and write the embedded Release JS bundle. After adding or changing this plugin, run `npx expo prebuild --platform ios --no-install` to apply it before building from Xcode.
+For an iPhone build that launches without Metro, run `npm run ios:release`. It uses Expo's device picker, builds Release with the JS bundle embedded, and does not start Metro. Debug builds require the development server (`npm start`) to remain reachable from the phone. The local `with-ios-script-sandboxing` config plugin disables Xcode User Script Sandboxing for the app project so Metro can read project files and write the embedded Release JS bundle. After adding or changing this plugin, run `npx expo prebuild --platform ios --no-install` to apply it before building from Xcode.
 
 The current preview uses app version `0.1`, iOS `buildNumber: "1"`, and Android `versionCode: 1` in `app.json`, following the [Expo SDK 57 app configuration](https://docs.expo.dev/versions/v57.0.0/config/app/). The npm package and lockfile use the equivalent three-part version `0.1.0`. These values identify the preview milestone; they do not indicate a published build. After changing native version or branding configuration, run `npx expo prebuild` for the target platform and rebuild to apply it to an existing generated project.
 

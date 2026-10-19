@@ -19,7 +19,8 @@
         "foregroundImage": "./assets/images/myrabbit-logo.png"
       },
       "predictiveBackGestureEnabled": false,
-      "versionCode": 1
+      "versionCode": 1,
+      "package": "im.jiaxin.myrabbit"
     },
     "web": {
       "output": "static",

@@ -71,7 +71,9 @@ npm start
 
 ```sh
 npm run ios        # Local iOS build (macOS + Xcode)
+npm run ios:release # iOS Release build with embedded JS bundle; select a device
 npm run android    # Local Android build (Android SDK)
+npm run android:release # Android Release build with embedded JS bundle; select a device
 npm run web        # Browser preview
 npm test           # Focused tests
 npm run typecheck
