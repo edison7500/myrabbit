@@ -1,0 +1,1 @@
+Initial Android release: connect directly to Rybbit Cloud or a self-hosted server with an API key, view Dashboard metrics and traffic breakdowns, inspect recent sessions, switch sites, and choose light, dark or system appearance.

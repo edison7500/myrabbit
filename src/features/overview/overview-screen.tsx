@@ -1,6 +1,6 @@
 import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
-import { ArrowDown, ArrowUp } from 'lucide-react-native';
+import { ArrowDown, ArrowUp, Users, Repeat2, Eye, Layers, CornerUpLeft, Timer } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Text, View, useWindowDimensions } from 'react-native';
@@ -19,8 +19,8 @@ type OverviewLoader = (context: AnalyticsQueryContext, signal: AbortSignal) => P
 type PreviousOverviewLoader = (context: AnalyticsQueryContext, signal: AbortSignal) => Promise<Overview | null>;
 
 const metrics = [
-  ['users', 'Unique Users'], ['sessions', 'Sessions'], ['pageviews', 'Pageviews'],
-  ['pages_per_session', 'Pages per Session'], ['bounce_rate', 'Bounce Rate'], ['session_duration', 'Session Duration'],
+  ['users', 'Unique Users', 'visitors', Users], ['sessions', 'Sessions', 'sessions', Repeat2], ['pageviews', 'Pageviews', 'pageviews', Eye],
+  ['pages_per_session', 'Pages per Session', 'pages_per_session', Layers], ['bounce_rate', 'Bounce Rate', 'bounce_rate', CornerUpLeft], ['session_duration', 'Session Duration', 'avg_session_duration', Timer],
 ] as const;
 
 function format(value: number | undefined, metric: keyof Overview) {
@@ -116,7 +116,7 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
     {loading ? <LoadingState variant="cards" message={`Loading ${rangeName.toLowerCase()} analytics…`} /> : null}
     {error ? <ErrorState message={error} onRetry={refreshing ? undefined : refresh} /> : null}
     {!loading && !error && !hasOverviewData(overview) ? <EmptyState message={`No analytics were recorded for ${rangeName.toLowerCase()}.`} /> : null}
-    {hasOverviewData(overview) && overview ? <View style={[styles.grid, fontScale > 1.3 && styles.singleColumn]}>{metrics.map(([key, label]) => {
+    {hasOverviewData(overview) && overview ? <View style={[styles.grid, fontScale > 1.3 && styles.singleColumn]}>{metrics.map(([key, label, route, icon]) => {
       const change = metricChange(overview[key], previousOverview?.[key], key);
       const changeColor = change?.tone === 'positive' ? colors.positive : change?.tone === 'negative' ? colors.danger : colors.muted;
       const trend = change ? <View style={styles.change} accessibilityLabel={`${change.direction === 'up' ? 'Up' : change.direction === 'down' ? 'Down' : 'No change'} ${change.percent.toFixed(1)} percent from previous period`}>
@@ -125,10 +125,10 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
         <Text style={[styles.changeText, { color: changeColor }]}>{change.percent.toFixed(1)}%</Text>
         <Text style={styles.comparisonLabel}>vs prior</Text>
       </View> : null;
-      return <MetricCard key={key} label={label} value={format(overview[key], key)} trend={trend}
+      return <MetricCard key={key} label={label} value={format(overview[key], key)} trend={trend} icon={icon}
         singleColumn={fontScale > 1.3}
-        accessibilityLabel={key === 'users' ? 'Open Visitors details' : undefined}
-        onPress={key === 'users' ? () => router.push('/metrics/visitors') : undefined} />;
+        accessibilityLabel={`Open ${key === 'users' ? 'Visitors' : label} details`}
+        onPress={() => router.push(`/metrics/${route}`)} />;
     })}</View> : null}
   </Screen>;
 }

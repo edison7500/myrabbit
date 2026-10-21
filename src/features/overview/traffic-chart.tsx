@@ -4,12 +4,13 @@ import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-nativ
 import { useId, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import type { AnalyticsBucket } from '@/api/rybbit/date-range';
-import type { TrafficPoint } from '@/api/rybbit/client';
+import type { TrafficPoint, OverviewMetric } from '@/api/rybbit/client';
+import { formatMetricValue, metricLabels } from '@/features/metrics/metric-format';
 import { radii, spacing, typography } from '@/constants/theme';
 
 const initialChartWidth = 320;
 const defaultChartHeight = 132;
-type TrendMetric = 'users' | 'pageviews';
+type TrendMetric = OverviewMetric;
 export type TrendSeries = { metric: TrendMetric; color?: string; fill?: boolean };
 
 function chartClock(timeZone: string, now: Date) {
@@ -40,19 +41,20 @@ export function chartElapsedCount(points: TrafficPoint[], bucket: AnalyticsBucke
   return firstIncomplete < 0 ? points.length : firstIncomplete;
 }
 
-export function dailyChartData(points: TrafficPoint[], previous: TrafficPoint[] | undefined, timeZone: string, now = new Date()) {
+export function dailyChartData(points: TrafficPoint[], previous: TrafficPoint[] | undefined, timeZone: string, now = new Date(), metric: TrendMetric = 'users') {
   const clock = chartClock(timeZone, now);
   const date = clock.current.slice(0, 10);
   const currentHour = Number(clock.current.slice(11, 13));
   const today = new Map(points.map(point => [clock.time(point.time).slice(0, 13), point]));
-  const yesterday = new Map(previous?.map(point => [clock.time(point.time).slice(11, 13), point.users]));
+  const yesterday = new Map(previous?.map(point => [clock.time(point.time).slice(11, 13), point[metric]]));
   const hours = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0'));
+  const hourlyValues = (metric: TrendMetric) => [0, ...hours.map(hour => today.get(`${date} ${hour}`)?.[metric] ?? 0)];
   // Plot each bucket at its END: the 21:00 bucket occupies 21:00–22:00.
   // The leading zero anchors midnight; future slots only reserve axis space.
   return {
     values: {
-      users: [0, ...hours.map(hour => today.get(`${date} ${hour}`)?.users ?? 0)],
-      pageviews: [0, ...hours.map(hour => today.get(`${date} ${hour}`)?.pageviews ?? 0)],
+      users: hourlyValues('users'), pageviews: hourlyValues('pageviews'), sessions: hourlyValues('sessions'),
+      pages_per_session: hourlyValues('pages_per_session'), bounce_rate: hourlyValues('bounce_rate'), session_duration: hourlyValues('session_duration'),
     },
     comparisonValues: [previous?.length ? 0 : null, ...hours.map(hour => yesterday.get(hour) ?? null)],
     elapsedCount: currentHour + 1,
@@ -112,11 +114,11 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height 
   const [width, setWidth] = useState(initialChartWidth);
   const [selection, setSelection] = useState<number | null>(null);
   const gradientId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  const day = fullDay && timeZone && bucket === 'hour' ? dailyChartData(points, comparisonPoints, timeZone) : null;
+  const day = fullDay && timeZone && bucket === 'hour' ? dailyChartData(points, comparisonPoints, timeZone, new Date(), series[0]?.metric) : null;
   const count = day ? 25 : points.length;
   const elapsedCount = day?.elapsedCount ?? (timeZone ? chartElapsedCount(points, bucket, timeZone) : points.length);
   const previousValues = day?.comparisonValues ?? comparisonValues;
-  const values = series.map(item => ({ ...item, color: item.color ?? (item.metric === 'users' ? colors.accent : colors.chartSecondary), values: day?.values[item.metric] ?? points.map(point => point[item.metric]) }));
+  const values = series.map(item => ({ ...item, color: item.color ?? (item.metric === 'pageviews' ? colors.chartSecondary : colors.accent), values: day?.values[item.metric] ?? points.map(point => point[item.metric] ?? 0) }));
   const maximum = Math.max(1, ...values.flatMap(line => line.values.slice(0, elapsedCount + 1)), ...(previousValues ?? []).filter((value): value is number => value !== null));
   const lines = values.map(item => ({ ...item, points: coordinates(item.values, maximum, width, height) }));
   const previousPath = previousValues?.length === count ? comparisonPath(previousValues, maximum, width, height) : '';
@@ -129,7 +131,7 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height 
   const selectedTime = selectedIndex === null ? '' : day
     ? `${String(selectedIndex - 1).padStart(2, '0')}:00–${String(selectedIndex).padStart(2, '0')}:00`
     : points[selectedIndex].time.replace('T', ' ').replace(/\.\d+Z$/, 'Z');
-  const selectedSummary = selectedIndex === null ? '' : `${selectedTime}${selectedIndex === elapsedCount ? ' · In progress' : ''}. ${lines.map(line => `${line.metric === 'users' ? 'Visitors' : 'Pageviews'}: ${line.values[selectedIndex].toLocaleString()}`).join('. ')}`;
+  const selectedSummary = selectedIndex === null ? '' : `${selectedTime}${selectedIndex === elapsedCount ? ' · In progress' : ''}. ${lines.map(line => `${metricLabels[line.metric]}: ${formatMetricValue(line.values[selectedIndex], line.metric)}`).join('. ')}`;
   function moveSelection(direction: number) {
     setSelection(Math.max(firstSelectable, Math.min(lastSelectable, (selectedIndex ?? firstSelectable) + direction)));
   }
@@ -193,12 +195,12 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height 
     </Pressable> : <View accessibilityRole="image" accessibilityLabel={accessibilityLabel}>{drawing}</View>}
     <View style={styles.axis}>{ticks.map(index => <Text key={index} style={styles.axisText}>{day ? `${String(index).padStart(2, '0')}:00` : timeLabel(points[index].time, bucket)}</Text>)}</View>
     {comparisonLabel && previousPath ? <View style={styles.legend}>
-      <View style={[styles.legendSolid, { borderColor: series[0]?.color }]} /><Text style={styles.legendText}>Today</Text>
+      <View style={[styles.legendSolid, { borderColor: lines[0]?.color }]} /><Text style={styles.legendText}>Today</Text>
       <View style={styles.legendPrevious} /><Text style={styles.legendText}>{comparisonLabel}</Text>
     </View> : null}
     {canInspect ? <View style={styles.inspection}>
       <Text accessibilityLiveRegion="polite" style={styles.inspectionText}>{selectedSummary || 'Tap the chart to inspect a time bucket'}</Text>
-      {selectedIndex !== null && previousPath && previousValues?.[selectedIndex] != null ? <Text style={styles.axisText}>{comparisonLabel}: {previousValues[selectedIndex].toLocaleString()}</Text> : null}
+      {selectedIndex !== null && previousPath && previousValues?.[selectedIndex] != null ? <Text style={styles.axisText}>{comparisonLabel}: {formatMetricValue(previousValues[selectedIndex], series[0].metric)}</Text> : null}
     </View> : null}
   </View>;
 }

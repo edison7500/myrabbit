@@ -1,0 +1,15 @@
+View your Rybbit website analytics on Android with MyRabbit, an independent, open-source mobile client.
+
+Connect to Rybbit Cloud or your own self-hosted Rybbit server using a manually created API key. Requests go directly to your configured server, with no MyRabbit backend or proxy.
+
+Features:
+* Dashboard metrics and traffic charts with selectable date ranges
+* Traffic breakdowns for content, referrers, technology, locations and events
+* Recent visitor sessions and activity
+* Switching between sites accessible to your API key
+* Light, dark and system appearance
+* Local credential storage using Expo SecureStore on Android
+
+An existing Rybbit site and an API key with organization/site discovery and analytics read access are required. Self-hosted API support depends on the server version. One server connection is saved at a time. Removing it clears local credentials and site selection without deleting server analytics.
+
+MyRabbit is not affiliated with or endorsed by Rybbit.

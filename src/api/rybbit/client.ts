@@ -5,7 +5,8 @@ import { buildAnalyticsContextQuery, buildPreviousAnalyticsContextQuery, type An
 
 export type Site = { id: string; name: string; domain: string; organization: string };
 export type Overview = Partial<Record<'sessions' | 'pageviews' | 'users' | 'pages_per_session' | 'bounce_rate' | 'session_duration', number>>;
-export type TrafficPoint = { time: string; users: number; pageviews: number };
+export type OverviewMetric = keyof Overview;
+export type TrafficPoint = { time: string; users: number; pageviews: number } & Overview;
 
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Unexpected response from Rybbit.');
@@ -81,6 +82,17 @@ export async function getTraffic(context: AnalyticsQueryContext, signal: AbortSi
       typeof point.pageviews !== 'number' || !Number.isFinite(point.pageviews)) {
       throw new Error('Unexpected traffic data from Rybbit.');
     }
-    return { time: point.time, users: point.users, pageviews: point.pageviews };
+    const result: TrafficPoint = { time: point.time, users: point.users, pageviews: point.pageviews };
+    // Older self-hosted versions may omit these fields. Preserve absence so a
+    // detail page can report incompatibility rather than charting false zeroes.
+    for (const metric of ['sessions', 'pages_per_session', 'bounce_rate', 'session_duration'] as const) {
+      const value = point[metric];
+      if (value === undefined || value === null) continue;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || (metric === 'bounce_rate' && value > 100)) {
+        throw new Error('Unexpected traffic data from Rybbit.');
+      }
+      result[metric] = value;
+    }
+    return result;
   });
 }

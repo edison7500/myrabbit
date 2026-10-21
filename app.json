@@ -2,10 +2,13 @@
   "expo": {
     "name": "MyRabbit",
     "slug": "myrabbit",
-    "version": "0.1",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/myrabbit-logo.png",
     "scheme": "myrabbit",
+    "updates": {
+      "enabled": false
+    },
     "userInterfaceStyle": "automatic",
     "ios": {
       "icon": "./assets/images/myrabbit-logo.png",
@@ -14,6 +17,11 @@
       "buildNumber": "1"
     },
     "android": {
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#212121",
         "foregroundImage": "./assets/images/myrabbit-logo.png"
@@ -28,6 +36,14 @@
     },
     "plugins": [
       "./plugins/with-ios-script-sandboxing",
+      "./plugins/with-android-release-signing",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": false
+        }
+      ],
       [
         "expo-build-properties",
         {

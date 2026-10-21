@@ -11,10 +11,11 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/content-state
 import { Screen } from '@/components/screen';
 import { radii } from '@/constants/theme';
 import { siteHeading } from '@/features/overview/overview-state';
-import { TrendChart, visitorsSeries } from '@/features/overview/traffic-chart';
+import { TrendChart, type TrendSeries } from '@/features/overview/traffic-chart';
 import { useSession } from '@/stores/session';
 import { alignYesterdayByHour, loadMetricDetail, type MetricDetailData } from './metric-detail-data';
 import { metricDefinitions, type MetricType } from './metric-types';
+import { formatMetricValue } from './metric-format';
 
 type DetailLoader = typeof loadMetricDetail;
 
@@ -30,6 +31,7 @@ export default function MetricDetailScreen({ metric, loadDetail = loadMetricDeta
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const refreshRequest = useRef<AbortController | null>(null);
   const definition = metricDefinitions[metric];
+  const series: TrendSeries[] = [{ metric: definition.apiMetric, fill: true }];
 
   useEffect(() => {
     if (!analyticsContext || !definition.detailAvailable) return;
@@ -71,7 +73,7 @@ export default function MetricDetailScreen({ metric, loadDetail = loadMetricDeta
   }
 
   if (!site || !definition.detailAvailable) return <Redirect href={site ? '/(tabs)/overview' : '/sites'} />;
-  const comparisonValues = data?.yesterday && data.points.length ? alignYesterdayByHour(data.points, data.yesterday) : undefined;
+  const comparisonValues = data?.yesterday && data.points.length ? alignYesterdayByHour(data.points, data.yesterday, definition.apiMetric) : undefined;
   const rotated = process.env.EXPO_OS !== 'web' && screenHeight > screenWidth;
   return <>
   <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} hidden={chartExpanded} />
@@ -82,12 +84,12 @@ export default function MetricDetailScreen({ metric, loadDetail = loadMetricDeta
     {!loading && error ? <ErrorState message={error} onRetry={refresh} /> : null}
     {!loading && !error && data?.points.length === 0 ? <EmptyState message={`No ${definition.title.toLowerCase()} were recorded for this range.`} /> : null}
     {!loading && !error && data && (data.points.length > 0 || dateRange.preset === 'today') ? <>
-      <View style={styles.summary}><Text selectable style={styles.total}>{data.total.toLocaleString()}</Text><Text style={styles.metric}>{definition.title}</Text></View>
+      <View style={styles.summary}><Text selectable style={styles.total}>{formatMetricValue(data.total, definition.apiMetric)}</Text><Text style={styles.metric}>{definition.title}</Text></View>
       <View style={styles.chartCard}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Expand Visitors chart" onPress={() => setChartExpanded(true)} style={styles.expandButton}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Expand ${definition.title} chart`} onPress={() => setChartExpanded(true)} style={styles.expandButton}>
           <Maximize2 size={18} color={colors.muted} strokeWidth={2} accessible={false} />
         </Pressable>
-        <TrendChart interactive points={data.points} bucket={analyticsBucket(dateRange)} timeZone={timeZone} series={visitorsSeries} height={160}
+        <TrendChart interactive points={data.points} bucket={analyticsBucket(dateRange)} timeZone={timeZone} series={series} height={160}
           fullDay={dateRange.preset === 'today'} comparisonPoints={data.yesterday ?? undefined}
           comparisonValues={comparisonValues}
           comparisonLabel={data.yesterday ? 'Yesterday' : undefined}
@@ -106,13 +108,13 @@ export default function MetricDetailScreen({ metric, loadDetail = loadMetricDeta
         transform: [{ rotate: '-90deg' }],
       } : { width: screenWidth, height: screenHeight }]}>
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Visitors trend</Text>
+          <Text style={styles.modalTitle}>{definition.title} trend</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close expanded chart" onPress={() => setChartExpanded(false)} hitSlop={12}>
             <X size={24} color={colors.text} strokeWidth={2} accessible={false} />
           </Pressable>
         </View>
         <View style={styles.expandedChartCard}>
-          <TrendChart interactive points={data.points} bucket={analyticsBucket(dateRange)} timeZone={timeZone} series={visitorsSeries}
+          <TrendChart interactive points={data.points} bucket={analyticsBucket(dateRange)} timeZone={timeZone} series={series}
             fullDay={dateRange.preset === 'today'} comparisonPoints={data.yesterday ?? undefined}
             height={Math.max(140, (rotated ? screenWidth : screenHeight) - 150)}
             comparisonValues={comparisonValues} comparisonLabel={data.yesterday ? 'Yesterday' : undefined}

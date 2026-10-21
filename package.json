@@ -2,6 +2,14 @@
   "name": "myrabbit",
   "main": "expo-router/entry",
   "version": "0.1.0",
+  "license": "MIT",
+  "expo": {
+    "autolinking": {
+      "android": {
+        "buildFromSource": [".*"]
+      }
+    }
+  },
   "dependencies": {
     "@expo/ui": "~57.0.16",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -38,7 +46,10 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "android:release": "expo run:android --variant release --device --no-bundler",
+    "android:release": "node scripts/android-build.cjs release --install",
+    "android:apk:debug": "node scripts/android-build.cjs debug",
+    "android:apk:unsigned": "node scripts/android-build.cjs unsigned",
+    "android:apk:release": "node scripts/android-build.cjs release",
     "ios": "expo run:ios",
     "ios:release": "expo run:ios --configuration Release --device --no-bundler",
     "web": "expo start --web",

@@ -7,7 +7,7 @@
 <p align="center">A lightweight Rybbit analytics client for iOS and Android.<br />Connect directly to Rybbit Cloud or your self-hosted instance.</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.1_Preview-8B5CF6" alt="Version: v0.1 Preview" />
+  <img src="https://img.shields.io/badge/version-v0.1.0_Preview-8B5CF6" alt="Version: v0.1.0 Preview" />
   <a href="https://docs.expo.dev/versions/v57.0.0/"><img src="https://img.shields.io/badge/Expo-SDK_57-000020" alt="Expo SDK 57" /></a>
   <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React_Native-0.86.3-61DAFB" alt="React Native 0.86.3" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6.0-3178C6" alt="TypeScript 6.0" /></a>
@@ -18,11 +18,11 @@
 
 MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your phone: check key metrics, explore traffic, and see recent visitor activity. It communicates directly with your configured Rybbit server, with no MyRabbit backend or proxy.
 
-**v0.1 Preview** is the current development milestone, not a published release. Public build and download links will be added here when available.
+**v0.1.0 Preview** is the current development milestone, not a published release. Public build and download links will be added here when available.
 
 ## Features
 
-- **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges.
+- **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges. All six icon-labeled cards open their own interactive trend chart, with no disclosure chevrons.
 - **Traffic exploration:** visitor/pageview charts, referrers, content, technology, locations, events, and a weekly trends heatmap, with detailed rankings.
 - **Realtime activity:** the latest 100 sessions from the last 30 minutes, expandable visitor details, and refreshes every 30 seconds while visible and active.
 - **Cloud and self-hosted connections:** test your server URL and API key before saving, then switch between accessible sites. One saved connection is supported at a time.
@@ -73,7 +73,10 @@ npm start
 npm run ios        # Local iOS build (macOS + Xcode)
 npm run ios:release # iOS Release build with embedded JS bundle; select a device
 npm run android    # Local Android build (Android SDK)
-npm run android:release # Android Release build with embedded JS bundle; select a device
+npm run android:apk:debug # Debug APK (requires Metro to run)
+npm run android:apk:unsigned # Unsigned release APK for packaging
+npm run android:apk:release # Signed release APK; requires private signing variables
+npm run android:release # Build/install signed Release; select via ANDROID_SERIAL if needed
 npm run web        # Browser preview
 npm test           # Focused tests
 npm run typecheck
@@ -83,9 +86,14 @@ npm run export     # Bundle iOS, Android, and static web
 
 Native builds are required to verify the final app icon and launch screen. For environment setup, Expo prebuild, Release builds, Metro, and Xcode troubleshooting, see the [development guide](docs/DEVELOPMENT.md).
 
+Android Studio and EAS Build are optional. For Android SDK command-line setup, local APK builds, signing, installation and the v0.1.0 release checklist, see [Android releases and F-Droid](docs/ANDROID_RELEASE.md). F-Droid inclusion is being prepared; no official F-Droid listing or public APK release is claimed here.
+
 ## Documentation
 
 - [Development, architecture, builds, troubleshooting, and testing](docs/DEVELOPMENT.md)
+- [Android release workflow and F-Droid preparation](docs/ANDROID_RELEASE.md)
+- [v0.1.0 preparation results and outstanding release gates](docs/RELEASE_STATUS.md)
+- [Privacy and API key handling](docs/PRIVACY.md)
 - [Rybbit API client and response contracts](src/api/rybbit/README.md)
 - [Local storage boundaries](src/storage/README.md)
 - [Session restoration and site selection](src/stores/README.md)

@@ -1,0 +1,1 @@
+A mobile client for Rybbit Cloud and self-hosted analytics

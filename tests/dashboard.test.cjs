@@ -28,11 +28,11 @@ test('metric comparison omits absent or zero baselines and treats a falling boun
   assert.equal(metricChange(100, 0, 'users'), null);
   assert.equal(metricChange(100, undefined, 'users'), null);
 });
-test('metric route model reserves future KPIs while enabling only Visitors', () => {
+test('metric route model enables all six Dashboard metrics', () => {
   assert.equal(isMetricType('visitors'), true); assert.equal(isMetricType('unknown'), false);
   assert.equal(metricDefinitions.visitors.apiMetric, 'users'); assert.equal(metricDefinitions.visitors.detailAvailable, true);
   for (const metric of ['pageviews', 'sessions', 'bounce_rate', 'pages_per_session', 'avg_session_duration']) {
-    assert.equal(metricDefinitions[metric].detailAvailable, false);
+    assert.equal(metricDefinitions[metric].detailAvailable, true);
   }
 });
 test('Visitors detail data reuses overview and time-series requests with one shared context', async () => {
@@ -47,7 +47,6 @@ test('Visitors detail data reuses overview and time-series requests with one sha
   assert.deepEqual(calls, [
     ['overview', queryContext, signal], ['traffic', queryContext, signal],
   ]);
-  await assert.rejects(detail.loadMetricDetail('pageviews', queryContext, signal), /not available yet/);
   assert.equal(calls.length, 2);
 });
 test('Today detail requests Yesterday with the same site, timezone and filters, then aligns hourly visitors', async () => {
@@ -195,4 +194,67 @@ test('getTraffic requests the time-series endpoint with the selected range and b
   assert.equal(requestedUrl.searchParams.get('time_zone'), 'Asia/Hong_Kong');
   global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ data: [{ time: 'bad', users: '2', pageviews: 4 }] }) });
   await assert.rejects(client.getTraffic(context(), new AbortController().signal), /Unexpected traffic data/);
+});
+
+test('all KPI detail loaders preserve the context and use each metric’s actual bucket values', async () => {
+  const values = { users: 23, sessions: 31, pageviews: 50, pages_per_session: 1.6, bounce_rate: 35.5, session_duration: 64 };
+  const points = [{ time: '2026-10-20 00:00:00', ...values }];
+  const requests = [];
+  const detail = createLoader({ '@/api/rybbit/client': {
+    getOverview: async () => values,
+    getTraffic: async (query, signal) => { requests.push([query, signal]); return points; },
+  } })('src/features/metrics/metric-detail-data.ts');
+  const query = context({ dateRange: { preset: 'last-7-days' } });
+  const signal = new AbortController().signal;
+  for (const [metric, definition] of Object.entries(metricDefinitions)) {
+    const result = await detail.loadMetricDetail(metric, query, signal);
+    assert.equal(result.total, values[definition.apiMetric]);
+    assert.equal(result.points[0][definition.apiMetric], values[definition.apiMetric]);
+    assert.deepEqual(detail.alignYesterdayByHour(points, points, definition.apiMetric), [values[definition.apiMetric]]);
+  }
+  assert.equal(requests.length, 6);
+  assert.ok(requests.every(([queryContext, querySignal]) => queryContext === query && querySignal === signal));
+});
+
+test('older servers cannot silently replace missing selected KPI series with zeroes', async () => {
+  const detail = createLoader({ '@/api/rybbit/client': {
+    getOverview: async () => ({ bounce_rate: 80 }),
+    getTraffic: async () => [{ time: '2026-10-20 00:00:00', users: 1, pageviews: 2 }],
+  } })('src/features/metrics/metric-detail-data.ts');
+  await assert.rejects(detail.loadMetricDetail('bounce_rate', context(), new AbortController().signal), /Bounce Rate trend is unavailable from this Rybbit server/);
+});
+
+test('missing comparison KPI does not discard the current series', async () => {
+  const detail = createLoader({ '@/api/rybbit/client': {
+    getOverview: async () => ({ session_duration: 64 }),
+    getTraffic: async query => [{ time: '2026-10-20 00:00:00', users: 1, pageviews: 2,
+      ...(query.dateRange.preset === 'today' ? { session_duration: 64 } : {}) }],
+  } })('src/features/metrics/metric-detail-data.ts');
+  const result = await detail.loadMetricDetail('avg_session_duration', context(), new AbortController().signal);
+  assert.equal(result.total, 64);
+  assert.equal(result.points[0].session_duration, 64);
+  assert.equal(result.yesterday, null);
+  assert.match(result.comparisonError, /Yesterday comparison unavailable/);
+});
+
+test('getTraffic validates and preserves all six optional KPI fields', async () => {
+  const client = createLoader({ '@/storage/connection': { loadConnection: async () => ({ mode: 'cloud', baseUrl: 'https://example.test', apiKey: 'test-only' }) } })('src/api/rybbit/client.ts');
+  let row = { time: '2026-10-20 00:00:00', users: 5, pageviews: 8, sessions: 6, pages_per_session: 1.33, bounce_rate: 50, session_duration: 64.2 };
+  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ data: [row] }) });
+  assert.deepEqual(await client.getTraffic(context(), new AbortController().signal), [row]);
+  for (const invalid of [{ sessions: '6' }, { pages_per_session: -1 }, { bounce_rate: 101 }, { session_duration: Infinity }]) {
+    const valid = row;
+    row = { ...row, ...invalid };
+    await assert.rejects(client.getTraffic(context(), new AbortController().signal), /Unexpected traffic data/);
+    row = valid;
+  }
+});
+
+test('KPI values format counts, percentages, ratios and durations for details and inspection', () => {
+  const { formatMetricValue } = load('src/features/metrics/metric-format.ts');
+  assert.equal(formatMetricValue(64, 'session_duration'), '1m 4s');
+  assert.equal(formatMetricValue(1.6, 'pages_per_session'), '1.6');
+  assert.equal(formatMetricValue(87.2, 'bounce_rate'), '87.2%');
+  assert.equal(formatMetricValue(0, 'session_duration'), '0m 0s');
+  assert.equal(formatMetricValue(0, 'bounce_rate'), '0%');
 });

@@ -27,14 +27,14 @@ export function SectionHeading({ title, icon: Icon, onPress, accessibilityLabel 
     : <View style={styles.heading}>{content}</View>;
 }
 
-export function MetricCard({ label, value, trend, onPress, accessibilityLabel, singleColumn = false }: {
-  label: string; value: string; trend?: ReactNode; singleColumn?: boolean; onPress?: () => void; accessibilityLabel?: string;
+export function MetricCard({ label, value, trend, icon: Icon, onPress, accessibilityLabel, singleColumn = false }: {
+  label: string; value: string; trend?: ReactNode; icon?: LucideIcon; singleColumn?: boolean; onPress?: () => void; accessibilityLabel?: string;
 }) {
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const content = <>
     <View style={styles.metricHeader}><Text style={styles.label}>{label}</Text>
-      {onPress ? <ChevronRight size={16} color={colors.muted} accessible={false} /> : null}</View>
+      {Icon ? <Icon size={18} strokeWidth={1.8} color={colors.muted} accessible={false} /> : null}</View>
     <Text selectable style={styles.value}>{value}</Text>
     {trend}
   </>;

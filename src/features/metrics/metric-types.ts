@@ -4,11 +4,11 @@ export type MetricType = 'visitors' | 'pageviews' | 'sessions' | 'bounce_rate' |
 
 export const metricDefinitions: Record<MetricType, { title: string; apiMetric: keyof Overview; detailAvailable: boolean }> = {
   visitors: { title: 'Visitors', apiMetric: 'users', detailAvailable: true },
-  pageviews: { title: 'Pageviews', apiMetric: 'pageviews', detailAvailable: false },
-  sessions: { title: 'Sessions', apiMetric: 'sessions', detailAvailable: false },
-  bounce_rate: { title: 'Bounce rate', apiMetric: 'bounce_rate', detailAvailable: false },
-  pages_per_session: { title: 'Pages / session', apiMetric: 'pages_per_session', detailAvailable: false },
-  avg_session_duration: { title: 'Avg. session', apiMetric: 'session_duration', detailAvailable: false },
+  pageviews: { title: 'Pageviews', apiMetric: 'pageviews', detailAvailable: true },
+  sessions: { title: 'Sessions', apiMetric: 'sessions', detailAvailable: true },
+  bounce_rate: { title: 'Bounce Rate', apiMetric: 'bounce_rate', detailAvailable: true },
+  pages_per_session: { title: 'Pages per Session', apiMetric: 'pages_per_session', detailAvailable: true },
+  avg_session_duration: { title: 'Session Duration', apiMetric: 'session_duration', detailAvailable: true },
 };
 
 export function isMetricType(value: string): value is MetricType {
