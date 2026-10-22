@@ -14,6 +14,8 @@ import { useSession } from '@/stores/session';
 import { dateRangeLabel, type AnalyticsDateRange } from '@/api/rybbit/date-range';
 import { analyticsQueryIdentity, type AnalyticsQueryContext } from '@/api/rybbit/analytics-context';
 import { hasOverviewData, metricChange, siteHeading } from './overview-state';
+import { formatOverviewValue } from './overview-format';
+import { currentWidgetRevision, syncDashboardWidget } from '@/features/widgets/widget-sync';
 
 type OverviewLoader = (context: AnalyticsQueryContext, signal: AbortSignal) => Promise<Overview>;
 type PreviousOverviewLoader = (context: AnalyticsQueryContext, signal: AbortSignal) => Promise<Overview | null>;
@@ -22,16 +24,6 @@ const metrics = [
   ['users', 'Unique Users', 'visitors', Users], ['sessions', 'Sessions', 'sessions', Repeat2], ['pageviews', 'Pageviews', 'pageviews', Eye],
   ['pages_per_session', 'Pages per Session', 'pages_per_session', Layers], ['bounce_rate', 'Bounce Rate', 'bounce_rate', CornerUpLeft], ['session_duration', 'Session Duration', 'avg_session_duration', Timer],
 ] as const;
-
-function format(value: number | undefined, metric: keyof Overview) {
-  if (value === undefined) return '—';
-  if (metric === 'bounce_rate') return `${Math.round(value)}%`;
-  if (metric === 'session_duration') return `${Math.floor(Math.round(value) / 60)}m ${Math.round(value) % 60}s`;
-  if (metric === 'pages_per_session') return value.toFixed(1);
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}m`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
-  return value.toLocaleString(undefined, { maximumFractionDigits: 0 });
-}
 
 export default function OverviewScreen() {
   const { analyticsContext } = useSession();
@@ -57,27 +49,34 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
   useEffect(() => {
     if (!analyticsContext) return;
     const controller = new AbortController();
-    loadOverview(analyticsContext, controller.signal).then(data => { if (!controller.signal.aborted) setOverview(data); })
-      .catch(issue => { if (!controller.signal.aborted) setError(issue instanceof Error ? issue.message : 'Could not load analytics.'); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => { controller.abort(); refreshRequest.current?.abort(); };
-  }, [analyticsContext, loadOverview]);
-
-  useEffect(() => {
-    if (!analyticsContext || range.preset === 'all-time') return;
-    const controller = new AbortController();
+    const requestedAt = Date.now();
+    const widgetRevision = currentWidgetRevision();
+    let loaded: { overview: Overview; updatedAt: number } | null = null;
+    let previous: Overview | null = null;
     comparisonRequest.current = controller;
-    loadPreviousOverview(analyticsContext, controller.signal)
-      .then(data => { if (!controller.signal.aborted) setPreviousOverview(data); })
+    const comparison = (range.preset === 'all-time' ? Promise.resolve(null) : loadPreviousOverview(analyticsContext, controller.signal))
+      .then(data => { if (!controller.signal.aborted) { previous = data; setPreviousOverview(data); } })
       .catch(() => { if (!controller.signal.aborted) setPreviousOverview(null); });
-    return () => { controller.abort(); comparisonRequest.current = null; };
-  }, [analyticsContext, loadPreviousOverview, range.preset]);
+    // Render current data immediately; cache only a comparison from this request.
+    const current = loadOverview(analyticsContext, controller.signal).then(data => {
+      if (!controller.signal.aborted) { setOverview(data); loaded = { overview: data, updatedAt: Date.now() }; }
+    }).catch(issue => { if (!controller.signal.aborted) setError(issue instanceof Error ? issue.message : 'Could not load analytics.'); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    void Promise.all([current, comparison]).then(() => {
+      if (loaded && site && !controller.signal.aborted) void syncDashboardWidget({
+        context: analyticsContext, site, ...loaded, previous, requestedAt, widgetRevision, signal: controller.signal,
+      });
+    });
+    return () => { controller.abort(); refreshRequest.current?.abort(); comparisonRequest.current = null; };
+  }, [analyticsContext, loadOverview, loadPreviousOverview, range.preset, site]);
 
   async function refresh() {
     if (loading || refreshRequest.current || !analyticsContext) return;
     comparisonRequest.current?.abort();
     comparisonRequest.current = null;
     const controller = new AbortController();
+    const requestedAt = Date.now();
+    const widgetRevision = currentWidgetRevision();
     refreshRequest.current = controller;
     setRefreshing(true);
     setError('');
@@ -89,6 +88,9 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
       if (overviewResult.status === 'fulfilled') {
         setOverview(overviewResult.value);
         setPreviousOverview(comparisonResult.status === 'fulfilled' ? comparisonResult.value : null);
+        if (site) void syncDashboardWidget({ context: analyticsContext, site, overview: overviewResult.value,
+          previous: comparisonResult.status === 'fulfilled' ? comparisonResult.value : null,
+          requestedAt, updatedAt: Date.now(), widgetRevision, signal: controller.signal });
       }
       else setError(overviewResult.reason instanceof Error ? overviewResult.reason.message : 'Could not refresh analytics.');
       refreshRequest.current = null;
@@ -125,7 +127,7 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
         <Text style={[styles.changeText, { color: changeColor }]}>{change.percent.toFixed(1)}%</Text>
         <Text style={styles.comparisonLabel}>vs prior</Text>
       </View> : null;
-      return <MetricCard key={key} label={label} value={format(overview[key], key)} trend={trend} icon={icon}
+      return <MetricCard key={key} label={label} value={formatOverviewValue(overview[key], key)} trend={trend} icon={icon}
         singleColumn={fontScale > 1.3}
         accessibilityLabel={`Open ${key === 'users' ? 'Visitors' : label} details`}
         onPress={() => router.push(`/metrics/${route}`)} />;

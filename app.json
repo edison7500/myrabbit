@@ -36,6 +36,7 @@
     },
     "plugins": [
       "./plugins/with-ios-script-sandboxing",
+      "./plugins/with-ios-widgets",
       "./plugins/with-android-release-signing",
       [
         "expo-secure-store",
@@ -61,7 +62,7 @@
           "dark": {
             "backgroundColor": "#212121"
           },
-          "image": "./assets/images/myrabbit-logo.png",
+          "image": "./assets/images/myrabbit-splash.png",
           "imageWidth": 180,
           "resizeMode": "contain"
         }

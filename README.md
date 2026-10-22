@@ -23,6 +23,7 @@ MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your pho
 ## Features
 
 - **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges. All six icon-labeled cards open their own interactive trend chart, with no disclosure chevrons.
+- **iOS Home Screen widgets:** Small shows unique users; Medium shows users, pageviews, and bounce rate; Large shows all six metrics, the site, and the last successful update. Widgets show Today for the selected site and analytics timezone, with the same values and comparisons as the unfiltered Dashboard.
 - **Traffic exploration:** visitor/pageview charts, referrers, content, technology, locations, events, and a weekly trends heatmap, with detailed rankings.
 - **Realtime activity:** the latest 100 sessions from the last 30 minutes, expandable visitor details, and refreshes every 30 seconds while visible and active.
 - **Cloud and self-hosted connections:** test your server URL and API key before saving, then switch between accessible sites. One saved connection is supported at a time.
@@ -86,7 +87,21 @@ npm run export     # Bundle iOS, Android, and static web
 
 Native builds are required to verify the final app icon and launch screen. For environment setup, Expo prebuild, Release builds, Metro, and Xcode troubleshooting, see the [development guide](docs/DEVELOPMENT.md).
 
+The launch screen uses `assets/images/myrabbit-splash.png`, a separate transparent asset with continuous rounded corners inspired by the iOS 27 icon silhouette (a visual approximation, not an exported Apple mask). Its rabbit artwork is preserved from the original logo. The app icon keeps the square `myrabbit-logo.png` source so the OS can apply its own mask. After changing the launch asset, run Expo prebuild and rebuild the native app; Metro reloads and Expo Go do not verify the final launch screen.
+
 Android Studio and EAS Build are optional. For Android SDK command-line setup, local APK builds, signing, installation and the v0.1.0 release checklist, see [Android releases and F-Droid](docs/ANDROID_RELEASE.md). F-Droid inclusion is being prepared; no official F-Droid listing or public APK release is claimed here.
+
+### iOS widgets
+
+Run `npx expo prebuild --platform ios` after pulling the widget integration, then rebuild with `npm run ios`. Expo Go cannot install the extension. The config plugin creates the WidgetKit/SwiftUI extension and App Group entitlements on each prebuild; generated Xcode files require no manual edits. The existing app deployment target is preserved.
+
+For signed device or EAS builds, enable App Groups for the app identifier `im.jiaxin.myrabbit` and extension identifier `im.jiaxin.myrabbit.widgets`, with `group.im.jiaxin.myrabbit.widgets` assigned to both. Provisioning profiles must include this capability. The plugin supplies EAS extension signing metadata. If you change the bundle identifier, use the plugin's derived identifiers and register the corresponding App Group.
+
+Open a Dashboard successfully, then long-press the iOS Home Screen, choose **Edit → Add Widget**, and select **MyRabbit**. All installed sizes follow the currently selected site. Tapping opens its Today Dashboard, respecting connection restoration and site guards. Changing sites or analytics timezone clears the old snapshot; removing or replacing a connection clears widget data locally.
+
+Only normalized metrics, site ID/domain, reporting date/timezone, update time, and a hashed context identifier enter the shared App Group container. API keys remain in the app's SecureStore. The extension reads cached data without React Native or network access. Successful Dashboard loads/refreshes publish a new snapshot; if viewing another date range or filtered analytics, the app separately requests unfiltered Today through the same Rybbit client. Network failures retain the last successful snapshot. Missing metrics on older servers display a dash, and missing comparisons are omitted.
+
+WidgetKit is asked to reread the cache about every 30 minutes; iOS controls actual scheduling. This does **not** fetch new analytics while the app is closed. Data older than one hour or from a previous reporting day is marked stale, with its last update time. Open or refresh the Dashboard to obtain new data. Empty, loading, and cached offline states are supported.
 
 ## Documentation
 

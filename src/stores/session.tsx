@@ -4,6 +4,7 @@ import { isValidAnalyticsTimeZone, type AnalyticsFilter, type AnalyticsQueryCont
 import { getSites, type Site } from '@/api/rybbit/client';
 import { clearConnection, loadConnection } from '@/storage/connection';
 import { clearSelectedSite, restoreSelectedSite, saveSelectedSite } from '@/storage/selected-site';
+import { setWidgetContext } from '@/features/widgets/widget-sync';
 
 type Session = {
   ready: boolean;
@@ -33,11 +34,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
     let active = true;
     const controller = new AbortController();
     async function restore() {
+      const restoredTimeZone = analyticsTimeZone();
       const config = await loadConnection();
-      if (!active || !config?.apiKey.trim()) return;
+      if (!active) return;
+      if (!config?.apiKey.trim()) { setWidgetContext(null, null, restoredTimeZone); return; }
       setServerUrl(config.baseUrl);
       const restored = await restoreSelectedSite(config.baseUrl, getSites, controller.signal);
-      if (active) setSite(restored);
+      if (active) { setWidgetContext(config.baseUrl, restored, restoredTimeZone); setSite(restored); }
     }
     restore().catch(() => {}).finally(() => { if (active) setReady(true); });
     return () => { active = false; controller.abort(); };
@@ -46,11 +49,13 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const selectSite = useCallback(async (nextSite: Site) => {
     if (!serverUrl) throw new Error('Configure your Rybbit connection first.');
     await saveSelectedSite(serverUrl, nextSite);
+    setWidgetContext(serverUrl, nextSite, timeZone);
     setFilters([]);
     setSite(nextSite);
-  }, [serverUrl]);
+  }, [serverUrl, timeZone]);
 
   async function disconnect() {
+    setWidgetContext(null, null, timeZone);
     // Keep the active connection until both local stores have been cleared.
     await clearSelectedSite();
     await clearConnection();
@@ -62,10 +67,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   function selectTimeZone(nextTimeZone: string) {
     if (!isValidAnalyticsTimeZone(nextTimeZone)) throw new Error('Choose a valid analytics timezone.');
+    setWidgetContext(serverUrl, site, nextTimeZone);
     setTimeZone(nextTimeZone);
   }
 
   async function connected(url: string) {
+    setWidgetContext(null, null, timeZone);
     setSite(null);
     setDateRange({ preset: 'today' });
     setFilters([]);

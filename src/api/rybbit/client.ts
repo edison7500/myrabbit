@@ -64,6 +64,8 @@ function parseOverview(response: Record<string, unknown>): Overview {
   const overview: Overview = {};
   for (const key of ['sessions', 'pageviews', 'users', 'pages_per_session', 'bounce_rate', 'session_duration'] as const) {
     const value = data[key];
+    // Rybbit returns null for ratios/duration when the period has no sessions.
+    if (value === null && (key === 'pages_per_session' || key === 'bounce_rate' || key === 'session_duration')) continue;
     if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) throw new Error('Unexpected analytics data from Rybbit.');
     if (typeof value === 'number') overview[key] = value;
   }

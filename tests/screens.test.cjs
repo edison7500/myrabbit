@@ -68,6 +68,37 @@ function dashboardSession(site) {
 }
 const saved = { mode: 'self-host', baseUrl: 'https://example.test', apiKey: 'test-key' };
 
+test('Dashboard publishes the current request and its matching comparison to widgets after both settle', async () => {
+  const writes = [];
+  const comparison = deferred();
+  const overview = { users: 20, bounce_rate: 40 };
+  const load = createLoader({ ...baseMocks,
+    '@/stores/session': dashboardSession({ id: '1', name: 'Example', domain: 'example.test' }),
+    '@/features/widgets/widget-sync': {
+      currentWidgetRevision: () => 6,
+      syncDashboardWidget: async result => writes.push(result),
+    },
+  });
+  const { Dashboard } = load('src/features/overview/overview-screen.tsx');
+  let tree;
+  await act(async () => { tree = create(React.createElement(Dashboard, {
+    loadOverview: async () => overview, loadPreviousOverview: () => comparison.promise,
+  })); });
+  assert.match(text(tree.toJSON()), /Unique Users/);
+  assert.equal(writes.length, 0);
+  const previous = { users: 10, bounce_rate: 50 };
+  await act(async () => comparison.resolve(previous));
+  assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0].overview, overview);
+  assert.deepEqual(writes[0].previous, previous);
+  assert.equal(writes[0].context.siteId, '1');
+  assert.equal(writes[0].widgetRevision, 6);
+  assert.ok(writes[0].updatedAt >= writes[0].requestedAt);
+  const signal = writes[0].signal;
+  await act(async () => tree.unmount());
+  assert.equal(signal.aborted, true);
+});
+
 test('connection screen tests before saving, invalidates edits and blocks keyboard bypass', async () => {
   let stored = null; const routes = [];
   const load = createLoader({ ...baseMocks,

@@ -4,6 +4,8 @@
 
 `analytics-context.ts` defines the credential-free shared query context and deterministic request identity. `breakdown.ts` implements the source-verified Referrers, Pages, Browsers and Countries dimension request, runtime response validation and page-number pagination. UI support for these requests is implemented separately.
 
+iOS widgets reuse the overview requests, Dashboard number formatting, and `metricChange` calculations. Matching unfiltered Today responses are shared without extra requests; other ranges or filters trigger a separate unfiltered, fixed-calendar-day overview and previous-period pair. No credentials or raw responses enter the widget cache. Nullable no-session overview ratios/duration are normalized to unavailable fields while zero counts remain data, matching the [official metrics definitions](https://github.com/rybbit-io/rybbit/blob/9cee0e9007ecb574533a4a2f28623b78f84b18a1/server/src/services/siteMetrics/siteMetrics.ts); older versions may omit optional metrics.
+
 Connection setup tests the unsaved draft via `GET /api/organizations` with a 10-second timeout before allowing SecureStore persistence. No credentials are saved by the test itself.
 
 Contracts: https://rybbit.com/docs/api/organizations/list, https://rybbit.com/docs/api/organizations/sites, https://rybbit.com/docs/api/overview/overview and https://rybbit.com/docs/api/overview/time-series.
