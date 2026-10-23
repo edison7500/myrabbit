@@ -709,9 +709,11 @@ test('switching tabs keeps parent header visibility unchanged and only updates i
   await act(async () => { tree = create(React.createElement(Layout)); });
   assert.deepEqual(tree.root.findAllByType('TabScreen').map(screen => screen.props.name), ['overview', 'realtime', 'explore', 'settings']);
   for (const [route, title] of [['overview', 'Dashboard'], ['settings', 'Settings'], ['realtime', 'Realtime'], ['explore', 'Explore'], ['overview', 'Dashboard']]) {
-    segments = ['(tabs)', route];
-    await act(async () => { tree.update(React.createElement(Layout)); });
-    assert.deepEqual(tree.root.findByType('StackScreen').props.options, { title });
+    for (const path of [['(tabs)', route], ['(tabs)', route, 'index']]) {
+      segments = path;
+      await act(async () => { tree.update(React.createElement(Layout)); });
+      assert.deepEqual(tree.root.findByType('StackScreen').props.options, { title });
+    }
   }
   await act(async () => tree.unmount());
 });

@@ -18,16 +18,17 @@ export function ExploreNavigation({ disabled, onRangeChange }: { disabled: boole
   const [customOpen, setCustomOpen] = useState(false);
   const label = siteHeading(site);
   useFocusEffect(useCallback(() => {
+    if (process.env.EXPO_OS === 'ios') return;
     const title = () => <SiteSwitcher siteLabel={label} navbar width={Math.min(260, Math.max(90, width - 184))} />;
     const date = () => <DateRangeSelector value={dateRange} timeZone={timeZone} disabled={disabled} navbar
       onCustomRequest={() => setCustomOpen(true)} onChange={onRangeChange} />;
     navigation.setOptions({ headerTitle: title, headerRight: date,
-      unstable_headerRightItems: () => [{ type: 'custom', element: date(), hidesSharedBackground: true }],
+      unstable_headerRightItems: () => [{ type: 'custom', element: date(), hidesSharedBackground: process.env.EXPO_OS !== 'ios' }],
     });
     return () => navigation.setOptions({ headerTitle: undefined, headerRight: undefined, unstable_headerRightItems: undefined });
   }, [dateRange, disabled, label, navigation, onRangeChange, timeZone, width]));
 
-  return <Host colorScheme={scheme} seedColor={colors.accent} style={{ position: 'absolute' }}>
+  const sheet = <Host colorScheme={scheme} seedColor={colors.accent} style={{ position: 'absolute' }}>
     <BottomSheet isPresented={customOpen} onDismiss={() => setCustomOpen(false)} snapPoints={['half', 'full']}
       containerColor={colors.background} contentPadding={20}>
       <RNHostView matchContents>
@@ -46,4 +47,14 @@ export function ExploreNavigation({ disabled, onRangeChange }: { disabled: boole
       </RNHostView>
     </BottomSheet>
   </Host>;
+
+  // Keep the native large title free of custom title views and filter controls.
+  // This component lives inside the screen's scroll view on iOS.
+  if (process.env.EXPO_OS === 'ios') return <View>
+    <DateRangeSelector value={dateRange} timeZone={timeZone} disabled={disabled}
+      leadingControl={<SiteSwitcher siteLabel={label} />}
+      onCustomRequest={() => setCustomOpen(true)} onChange={onRangeChange} />
+    {sheet}
+  </View>;
+  return sheet;
 }

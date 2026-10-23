@@ -3,7 +3,7 @@ import { useTheme } from '@/stores/theme';
 import { useNavigation, useRouter } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import { X } from 'lucide-react-native';
-import { ActivityIndicator, Pressable } from 'react-native';
+import { ActivityIndicator, Platform, Pressable } from 'react-native';
 
 import { useSession } from '@/stores/session';
 
@@ -20,20 +20,26 @@ export default function SettingsModalLayout() {
     else router.dismissTo('/');
   }
 
+  const renderClose = () => <Pressable accessibilityRole="button" accessibilityLabel="Close settings"
+    onPress={close} style={({ pressed }) => [styles.close, pressed && { opacity: 0.65 }]}>
+    <X size={20} color={process.env.EXPO_OS === 'ios' ? colors.text : colors.muted} accessible={false} />
+  </Pressable>;
+
   return <>
     <Stack.Screen options={{ gestureEnabled: site !== null }} />
     <Stack screenOptions={{
       presentation: 'card',
-      headerStyle: { backgroundColor: colors.background },
+      headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
+      ...(process.env.EXPO_OS === 'ios' ? { headerTransparent: true,
+        headerBlurEffect: Number.parseInt(String(Platform.Version), 10) >= 26 ? 'none' as const : 'systemChromeMaterial' as const,
+        unstable_headerRightItems: () => [{ type: 'custom' as const, element: renderClose() }],
+      } : {}),
       contentStyle: { backgroundColor: colors.background },
       headerTintColor: colors.accent,
       headerTitleStyle: { color: colors.text },
       headerShadowVisible: false,
       headerBackButtonDisplayMode: 'minimal',
-      headerRight: () => <Pressable accessibilityRole="button" accessibilityLabel="Close settings"
-        onPress={close} style={({ pressed }) => [styles.close, pressed && { opacity: 0.65 }]}>
-        <X size={20} color={colors.muted} accessible={false} />
-      </Pressable>,
+      headerRight: renderClose,
     }}>
       <Stack.Screen name="connect" options={{ title: 'Connection setup' }} />
       <Stack.Screen name="connection-form" options={{ title: 'Connect to Rybbit' }} />

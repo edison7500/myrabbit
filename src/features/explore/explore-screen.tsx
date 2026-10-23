@@ -200,11 +200,12 @@ export function Explore({ loadOverview = getOverview, loadTraffic = getTraffic, 
         onRetry={retryReferrers} onOpen={() => router.push('/referrers')} showHeader={false} /> },
     ...chartSections,
   ]}>
+    {process.env.EXPO_OS === 'ios' ? <ExploreNavigation disabled={loading || refreshing} onRangeChange={changeRange} /> : null}
     {loading ? <LoadingState variant="summary" message={`Loading ${rangeName.toLowerCase()} analytics…`} /> : null}
     {error ? <ErrorState message={error} onRetry={refreshing ? undefined : refresh} /> : null}
     {!loading && !error && !overview ? <EmptyState message={`No analytics were recorded for ${rangeName.toLowerCase()}.`} /> : null}
   </Screen>;
-  return <><ExploreNavigation disabled={loading || refreshing} onRangeChange={changeRange} />{analyticsContext ? <ExploreCharts key={analyticsQueryIdentity(analyticsContext, 'charts')} context={analyticsContext} ref={charts}>
+  return <>{process.env.EXPO_OS !== 'ios' ? <ExploreNavigation disabled={loading || refreshing} onRangeChange={changeRange} /> : null}{analyticsContext ? <ExploreCharts key={analyticsQueryIdentity(analyticsContext, 'charts')} context={analyticsContext} ref={charts}>
     {renderScreen}
   </ExploreCharts> : renderScreen([])}</>;
 }

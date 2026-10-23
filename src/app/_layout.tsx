@@ -7,6 +7,7 @@ import { AppearanceProvider } from '@/stores/appearance';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router/react-navigation';
+import { Platform } from 'react-native';
 
 // Register before the first render so restoration keeps the native brand screen visible.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -42,14 +43,19 @@ function RootNavigator() {
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShown: false, orientation: 'portrait', contentStyle: { backgroundColor: colors.background } }}>
+      <Stack screenOptions={{ headerShown: false, orientation: 'portrait', contentStyle: { backgroundColor: colors.background },
+        ...(process.env.EXPO_OS === 'ios' ? { headerTransparent: true,
+          // iOS 26+ supplies scroll-edge glass; earlier versions need a blur backdrop.
+          headerBlurEffect: Number.parseInt(String(Platform.Version), 10) >= 26 ? 'none' as const : 'systemChromeMaterial' as const,
+        } : {}),
+      }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(settings)" options={{ presentation: 'modal', contentStyle: { backgroundColor: colors.background } }} />
         <Stack.Screen name="referrers" options={{
           title: 'Referrers',
           headerShown: true,
           headerBackButtonDisplayMode: 'minimal',
-          headerStyle: { backgroundColor: colors.background },
+          headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
           headerTintColor: colors.accent,
           headerTitleStyle: { color: colors.text },
           headerShadowVisible: false,
@@ -57,7 +63,7 @@ function RootNavigator() {
         <Stack.Screen name="explore/[section]" options={{
           headerShown: true,
           headerBackButtonDisplayMode: 'minimal',
-          headerStyle: { backgroundColor: colors.background },
+          headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
           headerTintColor: colors.accent,
           headerTitleStyle: { color: colors.text },
           headerShadowVisible: false,
@@ -66,7 +72,7 @@ function RootNavigator() {
           title: 'Traffic',
           headerShown: true,
           headerBackButtonDisplayMode: 'minimal',
-          headerStyle: { backgroundColor: colors.background },
+          headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
           headerTintColor: colors.accent,
           headerTitleStyle: { color: colors.text },
           headerShadowVisible: false,
@@ -76,7 +82,7 @@ function RootNavigator() {
           headerShown: true,
           orientation: 'portrait',
           headerBackButtonDisplayMode: 'minimal',
-          headerStyle: { backgroundColor: colors.background },
+          headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
           headerTintColor: colors.accent,
           headerTitleStyle: { color: colors.text },
           headerShadowVisible: false,
@@ -84,8 +90,9 @@ function RootNavigator() {
         <Stack.Screen name="(tabs)" options={{
           title: 'Dashboard',
           orientation: 'portrait',
-          headerShown: true,
-          headerStyle: { backgroundColor: colors.background },
+          // Each iOS tab owns its native navbar, allowing UIKit to track its scroll view.
+          headerShown: process.env.EXPO_OS !== 'ios',
+          headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
           headerTintColor: colors.accent,
           headerTitleStyle: { color: colors.text },
           headerShadowVisible: false,

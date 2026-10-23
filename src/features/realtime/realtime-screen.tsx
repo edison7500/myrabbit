@@ -22,7 +22,7 @@ export function RealtimeTable({ loadSessions = getRealtimeSessions }: { loadSess
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const { serverUrl, site, timeZone } = useSession();
-  const navigation = useNavigation('/');
+  const navigation = useNavigation(process.env.EXPO_OS === 'ios' ? undefined : '/');
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const wide = width - insets.left - insets.right >= 1000;
@@ -80,7 +80,7 @@ export function RealtimeTable({ loadSessions = getRealtimeSessions }: { loadSess
     </Pressable>;
     navigation.setOptions({
       headerRight: renderRefresh,
-      unstable_headerRightItems: () => [{ type: 'custom', element: renderRefresh(), hidesSharedBackground: true }],
+      unstable_headerRightItems: () => [{ type: 'custom', element: renderRefresh(), hidesSharedBackground: process.env.EXPO_OS !== 'ios' }],
     });
     return () => navigation.setOptions({ headerRight: undefined, unstable_headerRightItems: undefined });
   }, [busy, navigation, styles.refresh]));
@@ -88,7 +88,7 @@ export function RealtimeTable({ loadSessions = getRealtimeSessions }: { loadSess
   return <SafeAreaView edges={['left', 'right']} style={styles.root}>
     <FlatList data={rows ?? []} keyExtractor={row => row.session_id}
       contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={[styles.content, { paddingBottom: process.env.EXPO_OS === 'android' ? 24 : 110 + insets.bottom }]}
+      contentContainerStyle={[styles.content, { paddingBottom: process.env.EXPO_OS === 'web' ? 110 + insets.bottom : 24 }]}
       refreshControl={<RefreshControl refreshing={pullRefreshing} onRefresh={() => refresh.current(true)} tintColor={colors.accent} />}
       ListHeaderComponent={<View style={styles.header}>
         <View style={styles.headingRow}>

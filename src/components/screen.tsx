@@ -13,13 +13,14 @@ export function Screen({ title, description, children, navigationHeader = false,
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const insets = useSafeAreaInsets();
-  const floatingTabs = tabScreen && process.env.EXPO_OS !== 'android';
+  const automaticInsets = process.env.EXPO_OS === 'ios' && navigationHeader;
+  const floatingTabs = tabScreen && process.env.EXPO_OS === 'web';
   const showHeading = !navigationHeader || description != null;
   const introductoryContent = Children.toArray(children);
   const stickyHeaderIndices = sections?.map((_, index) => (showHeading ? 1 : 0) + introductoryContent.length + index * 2);
   return (
-    <SafeAreaView style={styles.safeArea} edges={{ top: navigationHeader ? 'off' : 'additive', bottom: tabScreen ? 'off' : 'additive', left: 'additive', right: 'additive' }}>
-      <ScrollView stickyHeaderIndices={stickyHeaderIndices} contentInsetAdjustmentBehavior="never" automaticallyAdjustContentInsets={false} alwaysBounceVertical={!!onRefresh} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined} contentContainerStyle={[styles.content, sections && { gap: 0 }, floatingTabs && { paddingBottom: 102 + insets.bottom }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag">
+    <SafeAreaView style={styles.safeArea} edges={{ top: navigationHeader ? 'off' : 'additive', bottom: tabScreen || automaticInsets ? 'off' : 'additive', left: 'additive', right: 'additive' }}>
+      <ScrollView stickyHeaderIndices={stickyHeaderIndices} contentInsetAdjustmentBehavior={automaticInsets ? 'automatic' : 'never'} automaticallyAdjustContentInsets={automaticInsets} alwaysBounceVertical={automaticInsets || !!onRefresh} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined} contentContainerStyle={[styles.content, sections && { gap: 0 }, floatingTabs && { paddingBottom: 102 + insets.bottom }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag">
         {showHeading ? <View style={[styles.heading, navigationHeader && { paddingTop: 0 }, sections && styles.sectionContent]}>
           {!navigationHeader ? <>
             <Text style={styles.brand}>MyRabbit</Text>

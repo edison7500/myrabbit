@@ -28,6 +28,7 @@ MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your pho
 - **Realtime activity:** the latest 100 sessions from the last 30 minutes, expandable visitor details, and refreshes every 30 seconds while visible and active.
 - **Cloud and self-hosted connections:** test your server URL and API key before saving, then switch between accessible sites. One saved connection is supported at a time.
 - **Appearance:** Light, Dark, or Auto to follow your device.
+- **iOS navigation:** system-native tabs stay expanded while scrolling. Health-style large navigation titles collapse into compact titles as content scrolls, with native scroll-edge materials and system accessibility support. Tap the active tab to return to the top. Lucide icons are preserved. Android keeps its existing navigation.
 - **Local credential storage:** API keys stay in SecureStore on iOS and Android. Browser previews keep credentials in memory only and require reconnecting after refresh.
 
 ## Screenshots

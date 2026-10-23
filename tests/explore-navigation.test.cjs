@@ -5,6 +5,37 @@ const { create, act } = require('react-test-renderer');
 const createLoader = require('./load-source.cjs');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
+test('iOS keeps filters in content without replacing the native title and preserves custom-date presentation', async t => {
+  const originalOS = process.env.EXPO_OS;
+  process.env.EXPO_OS = 'ios';
+  t.after(() => { if (originalOS === undefined) delete process.env.EXPO_OS; else process.env.EXPO_OS = originalOS; });
+  const changes = [];
+  const load = createLoader({
+    'react-native': { View: 'View', ScrollView: 'ScrollView', Text: 'Text', Pressable: 'Pressable', useWindowDimensions: () => ({ width: 390 }) },
+    'expo-router': {
+      useNavigation: () => ({ setOptions: () => assert.fail('iOS must retain its native large title') }),
+      useFocusEffect: callback => React.useEffect(callback, [callback]),
+    },
+    '@expo/ui': { Host: 'Host', RNHostView: 'RNHostView', BottomSheet: ({ isPresented, children }) => isPresented ? React.createElement('Sheet', null, children) : null },
+    '@/components/analytics-controls': { SiteSwitcher: 'SiteSwitcher' },
+    '@/components/date-range-selector': { DateRangeSelector: 'DateRangeSelector', CustomDateRangeForm: 'CustomDateRangeForm' },
+    '@/stores/session': { useSession: () => ({ site: { name: 'example.test', domain: 'example.test' }, dateRange: { preset: 'today' }, timeZone: 'UTC' }) },
+  });
+  const { ExploreNavigation } = load('src/features/explore/explore-navigation.tsx');
+  let tree;
+  await act(async () => { tree = create(React.createElement(ExploreNavigation, { disabled: false, onRangeChange: value => changes.push(value) })); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  const selector = tree.root.findByType('DateRangeSelector');
+  assert.equal(selector.props.leadingControl.props.siteLabel, 'example.test');
+  assert.equal(selector.props.navbar, undefined);
+  await act(async () => selector.props.onCustomRequest());
+  assert.equal(tree.root.findAllByType('Sheet').length, 1);
+  const range = { preset: 'custom', startDate: '2026-10-01', endDate: '2026-10-02' };
+  await act(async () => tree.root.findByType('CustomDateRangeForm').props.onChange(range));
+  assert.deepEqual(changes, [range]);
+  assert.equal(tree.root.findAllByType('Sheet').length, 0);
+});
+
 test('Explore navbar hosts the site switcher and date picker, validates custom dates, and clears on blur', async t => {
   let options = {}; let range = { preset: 'today' }; const changes = [];
   const navigation = { setOptions: next => { options = { ...options, ...next }; } };

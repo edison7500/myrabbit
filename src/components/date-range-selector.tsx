@@ -43,7 +43,7 @@ export function DateRangeSelector({ value, timeZone, disabled = false, leadingCo
   return <View style={styles.container}>
     <View style={[styles.toolbar, !navbar && fontScale > 1.3 && styles.stackedToolbar]}>
       {leadingControl}
-      <View accessibilityLabel={`Date range: ${dateRangeLabel(value)}`} style={[styles.selector, !navbar && landscape && styles.landscapeSelector, navbar && styles.navbarSelector]}>
+      <View accessibilityLabel={`Date range: ${dateRangeLabel(value)}`} style={[styles.selector, !navbar && landscape && styles.landscapeSelector, navbar && styles.navbarSelector, navbar && process.env.EXPO_OS === 'ios' && { backgroundColor: 'transparent', minHeight: 44 }]}>
         <CalendarDays size={17} color={colors.accent} accessible={false} />
         <Host key={landscape ? 'landscape' : 'portrait'} matchContents={{ vertical: true }} colorScheme={scheme} seedColor={colors.accent} style={styles.host}>
           <Picker selectedValue={selection} enabled={!disabled} onValueChange={(preset: AnalyticsDateRange['preset']) => {
