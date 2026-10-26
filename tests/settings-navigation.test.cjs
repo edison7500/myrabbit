@@ -127,6 +127,7 @@ test('settings uses card navigation inside a single modal, with Close targeting 
   const view = await settings(site);
   const stack = view.tree.root.findByType('Stack');
   assert.equal(stack.props.screenOptions.presentation, 'card');
+  assert.equal(stack.props.screenOptions.orientation, 'portrait');
   const screens = view.tree.root.findAllByType('StackScreen');
   assert.deepEqual(screens.filter(node => node.props.name).map(node => node.props.name), ['connect', 'connection-form', 'sites']);
   let close;

@@ -24,7 +24,7 @@ const icons = Object.fromEntries(['Users', 'Repeat2', 'Layers', 'CornerUpLeft', 
 let exploreHeaderOptions = {};
 const headerNavigation = { setOptions: options => { exploreHeaderOptions = { ...exploreHeaderOptions, ...options }; } };
 const Link = ({ children, ...props }) => React.createElement('Link', props, children);
-const baseMocks = { 'react-native': native, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView', useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }, 'lucide-react-native': icons,
+const baseMocks = { 'react-native': native, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider', useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }, 'lucide-react-native': icons,
   'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, useReducedMotion: () => false },
   'expo-status-bar': { StatusBar: 'StatusBar' },
   '@/api/rybbit/client': {
@@ -45,7 +45,7 @@ const baseMocks = { 'react-native': native, 'react-native-safe-area-context': { 
     getWeeklyTrend: async () => [],
   },
   'react-native-svg': { __esModule: true, default: 'Svg', Circle: 'Circle', Defs: 'Defs', LinearGradient: 'LinearGradient', Line: 'Line', Path: 'Path', Stop: 'Stop' },
-  'expo-router': { Link, useRouter: () => ({ push: () => {} }), useNavigation: () => headerNavigation, useFocusEffect: callback => React.useEffect(callback, [callback]) },
+  'expo-router': { Link, useRouter: () => ({ push: () => {}, back: () => {} }), useNavigation: () => headerNavigation, useFocusEffect: callback => React.useEffect(callback, [callback]) },
   '@expo/ui': { Host: 'Host', Picker, RNHostView: 'RNHostView', BottomSheet: ({ isPresented, children }) => isPresented ? React.createElement('BottomSheet', null, children) : null, Row: 'Row', Spacer: 'Spacer', Text: 'NativeText' } };
 function text(node) { return Array.isArray(node) ? node.map(text).join('') : typeof node === 'string' || typeof node === 'number' ? String(node) : node?.children?.map(text).join('') ?? ''; }
 function deferred() { let resolve; let reject; const promise = new Promise((a,b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
@@ -263,6 +263,99 @@ test('Visitors route leaves app orientation unchanged', async () => {
   assert.equal(require('../app.json').expo.orientation, 'portrait');
   await act(async () => tree.unmount());
 });
+
+test('native navigation permits device rotation only on the metric detail route', async () => {
+  const Stack = Object.assign(({ children, ...props }) => React.createElement('Stack', props, children), { Screen: 'StackScreen' });
+  const load = createLoader({ ...baseMocks,
+    'expo-router/stack': { Stack },
+    'expo-splash-screen': { preventAutoHideAsync: async () => {}, hide: () => {} },
+    'react-native-gesture-handler': { GestureHandlerRootView: 'GestureHandlerRootView' },
+    'expo-router/react-navigation': { DarkTheme: { colors }, DefaultTheme: { colors }, ThemeProvider: 'ThemeProvider' },
+    '@/stores/appearance': { AppearanceProvider: 'AppearanceProvider' },
+    '@/stores/session': { SessionProvider: 'SessionProvider', useSession: () => ({ ready: true }) },
+    '@/stores/theme': { useTheme: () => ({ ready: true, scheme: 'light', colors }) },
+  });
+  const Layout = load('src/app/_layout.tsx').default;
+  let tree;
+  await act(async () => { tree = create(React.createElement(Layout)); });
+  assert.equal(tree.root.findByType('Stack').props.screenOptions.orientation, 'portrait');
+  const screens = tree.root.findAllByType('StackScreen');
+  assert.deepEqual(screens.filter(node => node.props.options?.orientation === 'all').map(node => node.props.name), ['metrics/[metric]']);
+  for (const screen of screens.filter(node => node.props.name !== 'metrics/[metric]')) {
+    assert.equal(screen.props.options?.orientation ?? 'portrait', 'portrait');
+  }
+  assert.deepEqual(require('../app.json').expo.ios.infoPlist.UISupportedInterfaceOrientations,
+    ['UIInterfaceOrientationPortrait', 'UIInterfaceOrientationLandscapeLeft', 'UIInterfaceOrientationLandscapeRight']);
+  await act(async () => tree.unmount());
+  const tabLoad = createLoader({ ...baseMocks,
+    'react-native': { ...native, Platform: { Version: 26 } },
+    'expo-router/stack': { Stack },
+  });
+  const { TabStack } = tabLoad('src/components/tab-stack.ios.tsx');
+  await act(async () => { tree = create(React.createElement(TabStack, { title: 'Dashboard' })); });
+  assert.equal(tree.root.findByType('Stack').props.screenOptions.orientation, 'portrait',
+    'nested native tab stacks must also set portrait; UIKit reads the innermost controller');
+  await act(async () => tree.unmount());
+});
+
+test('metric details follow rotation, preserve data, retain failure navigation and reset the header on blur', async () => {
+  let dimensions = { width: 390, height: 844 };
+  let options = {}; let focused = true; let requests = 0; let backs = 0;
+  const navigation = { setOptions: next => { options = { ...options, ...next }; } };
+  const pending = deferred();
+  const loader = async () => { requests++; return pending.promise; };
+  const load = createLoader({ ...baseMocks,
+    'react-native': { ...native, useWindowDimensions: () => dimensions },
+    'expo-router': { ...baseMocks['expo-router'], useNavigation: () => navigation,
+      useRouter: () => ({ back: () => backs++ }),
+      useFocusEffect: callback => React.useEffect(() => focused ? callback() : undefined, [callback, focused]),
+    },
+    '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }),
+  });
+  const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
+  let tree;
+  const render = () => React.createElement(Detail, { metric: 'visitors', loadDetail: loader });
+  await act(async () => { tree = create(render()); });
+  assert.equal(options.headerShown, true);
+  dimensions = { width: 844, height: 390 };
+  await act(async () => tree.update(render()));
+  assert.equal(options.headerShown, true, 'loading must keep the native back button');
+  await act(async () => pending.resolve({ total: 5, points: [{ time: '2026-01-01 00:00:00', users: 5 }] }));
+  assert.equal(options.headerShown, false);
+  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' }));
+  await act(async () => tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' }).props.onPress());
+  assert.equal(backs, 1);
+  dimensions = { width: 390, height: 844 };
+  await act(async () => tree.update(render()));
+  assert.equal(options.headerShown, true);
+  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }));
+  assert.equal(requests, 1, 'rotation must not repeat the analytics request');
+  await act(async () => tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }).props.onPress());
+  assert.equal(tree.root.findAllByType('Modal').length, 1);
+  dimensions = { width: 844, height: 390 };
+  await act(async () => tree.update(render()));
+  assert.equal(options.headerShown, false);
+  await act(async () => tree.root.findByType('Modal').findByProps({ accessibilityLabel: 'Close expanded chart' }).props.onPress());
+  assert.equal(backs, 2, 'one close leaves the landscape page even when opened from the fullscreen button');
+  assert.equal(tree.root.findAllByType('Modal').length, 0);
+  focused = false;
+  await act(async () => tree.update(render()));
+  assert.equal(options.headerShown, true, 'blur restores native navigation even if the route remains mounted');
+  await act(async () => tree.unmount());
+
+  const failureLoad = createLoader({ ...baseMocks,
+    'react-native': { ...native, useWindowDimensions: () => dimensions },
+    'expo-router': { ...baseMocks['expo-router'], useNavigation: () => navigation },
+    '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }),
+  });
+  const FailedDetail = failureLoad('src/features/metrics/metric-detail-screen.tsx').default;
+  await act(async () => { tree = create(React.createElement(FailedDetail, { metric: 'visitors', loadDetail: async () => { throw new Error('Offline'); } })); });
+  assert.equal(options.headerShown, true);
+  assert.match(text(tree.toJSON()), /Offline/);
+  assert.equal(tree.root.findAllByProps({ accessibilityLabel: 'Close expanded chart' }).length, 0);
+  await act(async () => tree.unmount());
+});
+
 test('Visitors fills the current series and draws a neutral solid comparison on the same scale', async () => {
   const { TrendChart, visitorsSeries } = createLoader(baseMocks)('src/features/overview/traffic-chart.tsx');
   const points = [{ time: '2026-01-02 00:00:00', users: 5, pageviews: 8 }, { time: '2026-01-02 01:00:00', users: 10, pageviews: 12 }];
@@ -383,6 +476,67 @@ test('Visitors shows the full Today axis with zero current buckets in both portr
   assert.equal(tree.root.findAllByType('Text').filter(node => node.props.children === '24:00').length, 2);
 });
 
+test('fullscreen chart animates natively, follows safe edges and keeps a large close control outside scrolling content', async () => {
+  let closes = 0;
+  let insets = { top: 62, right: 0, bottom: 34, left: 0 };
+  const load = createLoader({ ...baseMocks,
+    'react-native-safe-area-context': { ...baseMocks['react-native-safe-area-context'],
+      useSafeAreaInsets: () => insets,
+    },
+    '@/features/overview/traffic-chart': { TrendChart: 'TrendChart' },
+  });
+  const { ExpandedMetricChart } = load('src/features/metrics/expanded-metric-chart.tsx');
+  let tree;
+  const props = {
+    title: 'Visitors', chart: { points: [] }, onClose: () => closes++,
+  };
+  await act(async () => { tree = create(React.createElement(ExpandedMetricChart, props)); });
+  const modal = tree.root.findByType('Modal');
+  assert.equal(modal.findAllByType('SafeAreaProvider').length, 1);
+  assert.equal(modal.props.animationType, 'fade');
+  assert.deepEqual(modal.props.supportedOrientations, ['portrait', 'landscape-left', 'landscape-right']);
+  const panel = () => modal.findAllByType('View').find(node => Array.isArray(node.props.style));
+  assert.deepEqual(panel().props.style[1], { paddingTop: 70, paddingRight: 16, paddingBottom: 42, paddingLeft: 16 });
+  const close = tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' });
+  const closeStyle = Object.assign({}, ...close.props.style({ pressed: false }).filter(Boolean));
+  assert.ok(closeStyle.width >= 44 && closeStyle.height >= 44);
+  assert.equal(tree.root.findByType('ScrollView').findAllByProps({ accessibilityLabel: 'Close expanded chart' }).length, 0);
+  // Native rotation reports the notch on either side; no manual rotation or
+  // absolute window-sized frame should override the modal's actual bounds.
+  for (const side of ['left', 'right']) {
+    insets = { top: 0, right: 0, bottom: 21, left: 0, [side]: 62 };
+    await act(async () => tree.update(React.createElement(ExpandedMetricChart, { ...props })));
+    assert.equal(panel().props.style[1][`padding${side === 'left' ? 'Left' : 'Right'}`], 78);
+    assert.equal(panel().props.style[0].flex, 1);
+    assert.equal(panel().props.style[0].transform, undefined);
+  }
+  await act(async () => { close.props.onPress(); modal.props.onRequestClose(); });
+  assert.equal(closes, 2);
+  await act(async () => tree.unmount());
+});
+
+test('expanded plot reserves measured labels, legend and inspection height as selection and text size change', async () => {
+  const { TrendChart, visitorsSeries } = createLoader(baseMocks)('src/features/overview/traffic-chart.tsx');
+  const points = [{ time: '2026-01-01 00:00:00', users: 2 }, { time: '2026-01-01 01:00:00', users: 4 }];
+  let tree;
+  await act(async () => { tree = create(React.createElement(TrendChart, {
+    points, bucket: 'hour', series: visitorsSeries, availableHeight: 280,
+    interactive: true, comparisonValues: [3, 5], comparisonLabel: 'Yesterday', accessibilityLabel: 'Expanded trend',
+  })); });
+  const details = tree.root.findAllByType('View').find(node => node.props.onLayout && node.findAllByType('Svg').length === 0);
+  assert.match(text(details), /00:00.*TodayYesterday.*Tap the chart/);
+  await act(async () => details.props.onLayout({ nativeEvent: { layout: { height: 100 } } }));
+  assert.equal(tree.root.findByType('Svg').props.height, 172);
+  await act(async () => tree.root.findByType('Pressable').props.onPress({ nativeEvent: { locationX: 0 } }));
+  assert.match(text(details), /Yesterday: 3/);
+  await act(async () => details.props.onLayout({ nativeEvent: { layout: { height: 140 } } }));
+  assert.equal(tree.root.findByType('Svg').props.height, 132);
+  // Extreme text sizes retain an inspectable plot; the modal scrolls its body.
+  await act(async () => details.props.onLayout({ nativeEvent: { layout: { height: 260 } } }));
+  assert.equal(tree.root.findByType('Svg').props.height, 80);
+  await act(async () => tree.unmount());
+});
+
 test('Dashboard cancels an active refresh when leaving the screen', async () => {
   const load = createLoader({ ...baseMocks, '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }) });
   const { Dashboard } = load('src/features/overview/overview-screen.tsx');
@@ -413,7 +567,7 @@ test('an Explore traffic failure keeps Referrers usable and can be retried indep
 });
 
 test('Visitors detail inherits the shared site and range, refreshes, and updates the shared range', async () => {
-  const load = createLoader({ ...baseMocks, 'expo-router': { Link, Redirect: 'Redirect' },
+  const load = createLoader({ ...baseMocks, 'expo-router': { ...baseMocks['expo-router'], Link, Redirect: 'Redirect' },
     '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }) });
   const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
   let pending = deferred(); const requests = [];
@@ -426,7 +580,7 @@ test('Visitors detail inherits the shared site and range, refreshes, and updates
   assert.ok(tree.root.findAllByProps({ accessibilityLabel: 'Visitors trend with 2 time buckets' }).some(node => node.props.accessibilityRole === 'adjustable'));
   await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }).props.onPress(); });
   assert.ok(tree.root.findByType('Modal'));
-  assert.deepEqual(tree.root.findByType('Modal').findAllByType('View').find(node => node.props.style?.[1]?.transform).props.style[1].transform, [{ rotate: '-90deg' }]);
+  assert.equal(tree.root.findByType('Modal').props.animationType, 'fade');
   assert.ok(tree.root.findByProps({ accessibilityLabel: 'Expanded visitors trend with 2 time buckets' }));
   await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' }).props.onPress(); });
   assert.equal(tree.root.findAllByType('Modal').length, 0);
@@ -446,7 +600,7 @@ test('Visitors detail inherits the shared site and range, refreshes, and updates
 
 test('Visitors detail handles empty and error results', async () => {
   const make = (loader) => {
-    const load = createLoader({ ...baseMocks, 'expo-router': { Link, Redirect: 'Redirect' },
+    const load = createLoader({ ...baseMocks, 'expo-router': { ...baseMocks['expo-router'], Link, Redirect: 'Redirect' },
       '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }) });
     const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
     return React.createElement(Detail, { metric: 'visitors', loadDetail: loader });

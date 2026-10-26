@@ -7,7 +7,7 @@
 <p align="center">A lightweight Rybbit analytics client for iOS and Android.<br />Connect directly to Rybbit Cloud or your self-hosted instance.</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v0.1.0_Preview-8B5CF6" alt="Version: v0.1.0 Preview" />
+  <a href="https://github.com/edison7500/myrabbit/releases/tag/v0.1.0"><img src="https://img.shields.io/badge/version-v0.1.0-8B5CF6" alt="Version: v0.1.0" /></a>
   <a href="https://docs.expo.dev/versions/v57.0.0/"><img src="https://img.shields.io/badge/Expo-SDK_57-000020" alt="Expo SDK 57" /></a>
   <a href="https://reactnative.dev/"><img src="https://img.shields.io/badge/React_Native-0.86.3-61DAFB" alt="React Native 0.86.3" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6.0-3178C6" alt="TypeScript 6.0" /></a>
@@ -18,11 +18,12 @@
 
 MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your phone: check key metrics, explore traffic, and see recent visitor activity. It communicates directly with your configured Rybbit server, with no MyRabbit backend or proxy.
 
-**v0.1.0 Preview** is the current development milestone, not a published release. Public build and download links will be added here when available.
+**v0.1.0 for Android** was published on October 23, 2026. Download the signed APK and SHA-256 checksum from [GitHub Releases](https://github.com/edison7500/myrabbit/releases/tag/v0.1.0). F-Droid packaging is in preparation; Linux x86_64 build validation and F-Droid review remain pending.
 
 ## Features
 
 - **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges. All six icon-labeled cards open their own interactive trend chart, with no disclosure chevrons.
+- **Metric chart orientation:** metric details follow device rotation only while that page is visible; other pages stay portrait. Landscape shows the chart with a fixed header and large back control; rotate upright to restore the details. The fullscreen button opens a chart in the current orientation with a native fade, and the chart continues to follow rotation. Safe areas and scrollable details support smaller screens and larger text.
 - **iOS Home Screen widgets:** Small shows unique users; Medium shows users, pageviews, and bounce rate; Large shows all six metrics, the site, and the last successful update. Widgets show Today for the selected site and analytics timezone, with the same values and comparisons as the unfiltered Dashboard.
 - **Traffic exploration:** visitor/pageview charts, referrers, content, technology, locations, events, and a weekly trends heatmap, with detailed rankings.
 - **Realtime activity:** the latest 100 sessions from the last 30 minutes, expandable visitor details, and refreshes every 30 seconds while visible and active.
@@ -33,7 +34,7 @@ MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your pho
 
 ## Screenshots
 
-Screenshots will be added before public builds are available.
+Authentic Android screenshots are still pending and will be added to this page and the F-Droid listing metadata.
 
 | Dashboard | Explore | Realtime |
 | --- | --- | --- |
@@ -42,7 +43,7 @@ Screenshots will be added before public builds are available.
 ## Getting Started
 
 1. Open your Rybbit web interface (Cloud or self-hosted) and create an API key in its settings. See Rybbit’s [API key guide](https://rybbit.com/docs/api/getting-started). The key needs access to organization/site discovery and analytics reads.
-2. Build and launch MyRabbit using the development commands below. On the startup screen, tap **Add a site**, choose Cloud or enter your self-hosted server URL, and paste the API key.
+2. Install the Android APK from [GitHub Releases](https://github.com/edison7500/myrabbit/releases/tag/v0.1.0), or build the app using the development commands below. On the startup screen, tap **Add a site**, choose Cloud or enter your self-hosted server URL, and paste the API key.
 3. Tap **Test Connection**, then **Save & Continue** after verification. MyRabbit opens the first accessible site; use the site switcher to choose another.
 
 You need an existing Rybbit site with analytics data. MyRabbit does not create server-side sites or sign in with a username/password. Removing a connection clears only local credentials and site selection; your Rybbit sites and analytics remain on the server. Self-hosted API availability varies by server version; browser previews also require server CORS support.
@@ -88,9 +89,11 @@ npm run export     # Bundle iOS, Android, and static web
 
 Native builds are required to verify the final app icon and launch screen. For environment setup, Expo prebuild, Release builds, Metro, and Xcode troubleshooting, see the [development guide](docs/DEVELOPMENT.md).
 
+After pulling the chart rotation change, apply the iOS supported-orientation configuration with `npx expo prebuild --platform ios`, then rebuild with `npm run ios`. Metro reloads alone cannot update an installed app's orientation capabilities. Native navigation enables rotation only for metric details and restores the portrait policy when leaving; no app-wide sensor subscription is used.
+
 The launch screen uses `assets/images/myrabbit-splash.png`, a separate transparent asset with continuous rounded corners inspired by the iOS 27 icon silhouette (a visual approximation, not an exported Apple mask). Its rabbit artwork is preserved from the original logo. The app icon keeps the square `myrabbit-logo.png` source so the OS can apply its own mask. After changing the launch asset, run Expo prebuild and rebuild the native app; Metro reloads and Expo Go do not verify the final launch screen.
 
-Android Studio and EAS Build are optional. For Android SDK command-line setup, local APK builds, signing, installation and the v0.1.0 release checklist, see [Android releases and F-Droid](docs/ANDROID_RELEASE.md). F-Droid inclusion is being prepared; no official F-Droid listing or public APK release is claimed here.
+Android Studio and EAS Build are optional. For Android SDK command-line setup, local APK builds, signing, installation and the release checklist, see [Android releases and F-Droid](docs/ANDROID_RELEASE.md). To validate the published source on a separate Linux machine, follow [Linux x86_64 build validation](docs/LINUX_BUILD.md). An upstream GitHub release does not establish F-Droid acceptance.
 
 ### iOS widgets
 
@@ -108,7 +111,8 @@ WidgetKit is asked to reread the cache about every 30 minutes; iOS controls actu
 
 - [Development, architecture, builds, troubleshooting, and testing](docs/DEVELOPMENT.md)
 - [Android release workflow and F-Droid preparation](docs/ANDROID_RELEASE.md)
-- [v0.1.0 preparation results and outstanding release gates](docs/RELEASE_STATUS.md)
+- [Linux x86_64 build validation and evidence checklist](docs/LINUX_BUILD.md)
+- [v0.1.0 release status and outstanding F-Droid requirements](docs/RELEASE_STATUS.md)
 - [Privacy and API key handling](docs/PRIVACY.md)
 - [Rybbit API client and response contracts](src/api/rybbit/README.md)
 - [Local storage boundaries](src/storage/README.md)

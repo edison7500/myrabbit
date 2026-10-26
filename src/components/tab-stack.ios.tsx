@@ -5,6 +5,7 @@ import { useTheme } from '@/stores/theme';
 export function TabStack({ title }: { title: string }) {
   const { colors } = useTheme();
   return <Stack screenOptions={{
+    orientation: 'portrait',
     title,
     headerLargeTitleEnabled: true,
     headerTransparent: true,

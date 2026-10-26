@@ -14,7 +14,14 @@
       "icon": "./assets/images/myrabbit-logo.png",
       "bundleIdentifier": "im.jiaxin.myrabbit",
       "appleTeamId": "U644HLL3MX",
-      "buildNumber": "1"
+      "buildNumber": "1",
+      "infoPlist": {
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      }
     },
     "android": {
       "blockedPermissions": [

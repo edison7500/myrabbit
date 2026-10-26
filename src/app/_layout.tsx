@@ -80,7 +80,7 @@ function RootNavigator() {
         <Stack.Screen name="metrics/[metric]" options={{
           title: 'Visitors',
           headerShown: true,
-          orientation: 'portrait',
+          orientation: 'all',
           headerBackButtonDisplayMode: 'minimal',
           headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
           headerTintColor: colors.accent,

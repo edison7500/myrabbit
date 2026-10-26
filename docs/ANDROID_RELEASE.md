@@ -2,11 +2,13 @@
 
 [Back to MyRabbit](../README.md)
 
-This is the preparation workflow for **v0.1.0**, not evidence of a published or F-Droid-approved release. The stable Android application ID is `im.jiaxin.myrabbit`; the initial version name is `0.1.0` and version code is `1`. Keep the application ID unchanged for future updates and increase the version code for each release.
+**v0.1.0** was [published on GitHub](https://github.com/edison7500/myrabbit/releases/tag/v0.1.0) on October 23, 2026 with a signed Android APK and checksum. F-Droid packaging and acceptance remain pending. See the [release status](RELEASE_STATUS.md) for verified artifact details and outstanding work.
+
+The stable Android application ID is `im.jiaxin.myrabbit`; the initial version name is `0.1.0` and version code is `1`. Keep the application ID unchanged for future updates and increase the version code for each release. For the next validation step on a separate machine, follow [Linux x86_64 build validation](LINUX_BUILD.md).
 
 ## Command-line environment
 
-Android Studio, an Expo account and EAS Build are not required. Use Linux (including WSL) or macOS, Node.js 24 LTS, npm, a FLOSS JDK, and the Android SDK command-line tools from [Android Developers](https://developer.android.com/studio#command-tools). Start with OpenJDK 17. Download the appropriate command-line tools archive, verify its published checksum, and extract its `cmdline-tools` directory under `$ANDROID_HOME/cmdline-tools/19.0/` when using command-line tools 19.0. The resulting SDK manager path must be `$ANDROID_HOME/cmdline-tools/19.0/bin/sdkmanager`.
+Android Studio, an Expo account and EAS Build are not required. Use Linux (including WSL) or macOS, Node.js 24 LTS, npm, a FLOSS JDK 17, and the Android SDK command-line tools from [Android Developers](https://developer.android.com/studio#command-tools). The locked React Native Gradle plugin explicitly requests a Java 17 toolchain. On Debian 13 amd64, follow the [Temurin 17 archive setup](LINUX_BUILD.md#install-jdk-17-on-debian-13); `openjdk-17-jdk` is not in that distribution's standard APT repository. Download the appropriate command-line tools archive, verify its published checksum, and extract its `cmdline-tools` directory under `$ANDROID_HOME/cmdline-tools/19.0/` when using command-line tools 19.0. The resulting SDK manager path must be `$ANDROID_HOME/cmdline-tools/19.0/bin/sdkmanager`.
 
 Set paths in your shell, for example:
 
@@ -52,7 +54,9 @@ The config plugin clears Expo's default debug signing for release builds. Runnin
 
 ## Upstream signing and installation
 
-Create a dedicated release key outside the checkout with `keytool`; retain an encrypted offline backup and its passwords. This command prompts for passwords rather than putting them in shell history:
+For MyRabbit updates, reuse the existing v0.1.0 release key. Its public certificate SHA-256 fingerprint is `82e57d1ffb7b36872ef5e60c9aed49436997a79d6dda8dfd9677dd99ade07ea6`. Confirm the keystore matches before signing an update; key backup/recovery has not been verified by this documentation review.
+
+For a new application or an intentionally separate test identity, create a dedicated key outside the checkout with `keytool`; retain an encrypted offline backup and its passwords. Do not replace MyRabbit's existing update key. This command prompts for passwords rather than putting them in shell history:
 
 ```sh
 keytool -genkeypair -v -keystore /secure/location/myrabbit-release.jks \
@@ -102,8 +106,8 @@ Upstream listing text, icon and version-code changelog live in `fastlane/metadat
 
 Before enabling the recipe:
 
-1. Make the complete source/tag publicly readable after reviewing tracked files and Git history for secrets. Confirm app, artwork and dependency redistribution licenses, retaining Expo and other third-party notices. `package.json`'s `private` flag only prevents npm publication; it does not control GitHub visibility.
-2. Build from a clean checkout in Linux using the locked dependencies, a pinned Node 24/npm toolchain and the recipe's exact SDK/JDK/Gradle/NDK versions. Record native dependency resolution and Gradle dependency verification data. Local source buildability and byte-for-byte reproducibility are separate checks.
+1. The source and v0.1.0 tag are public. Complete the remaining tracked-file/history secret review and confirm app, artwork and dependency redistribution licenses, retaining Expo and other third-party notices. `package.json`'s `private` flag only prevents npm publication; it does not control GitHub visibility.
+2. Follow the [Linux x86_64 guide](LINUX_BUILD.md) to build the release tag from a fresh checkout with locked dependencies and recorded toolchain versions. Then validate the F-Droid recipe in its own environment, including toolchain provisioning and Gradle invocation. Record native dependency resolution and review dependency verification metadata before adopting it. Local source buildability and byte-for-byte reproducibility are separate checks.
 3. Run F-Droid source and APK scanners. Review transitive Android/Maven dependencies and prebuilt npm/native binaries, including React Native/Hermes, rather than relying solely on npm license fields. Resolve findings individually; do not add blanket `scanignore` rules.
 4. Verify that the release has no dependency on proprietary build services, Google Play Services, proprietary tracking or ad SDKs. Review release permissions, network behavior, any remote-code update mechanism and the need for anti-feature disclosures. Viewing Rybbit analytics alone does not establish that the client tracks its own users.
 5. Confirm all needed operations work with a self-hosted server, without a mandatory hosted service or build-time API key. Users supply their own Rybbit API keys at runtime; F-Droid must not need a private account/key to build.
@@ -118,19 +122,19 @@ npm sbom --sbom-format cyclonedx > artifacts/release-audit/npm-sbom.cdx.json
 
 This inventory is platform-dependent and does not include Android's resolved Maven graph or prove license/scanner compliance. Keep it alongside the Gradle dependency report and actual APK audit results; regenerate it on the eventual Linux packaging environment.
 
-## Release gates
+## Release and packaging gates
 
-Preparation does not authorize declaring unfinished work released. Track these gates independently:
+Status reviewed on **2026-10-26**. Completed publication tasks and pending verification are tracked separately:
 
-- [ ] Review and commit the intended changes, including any existing working-tree changes chosen for v0.1.0.
-- [ ] `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and `npm run export` pass.
-- [ ] Clean Android debug and unsigned/signed release builds pass; inspect release manifest, permissions and dependency reports.
+- [x] Publish source and `v0.1.0` at `7e13d3c3abd287514d2eca803416922ad0fec069`.
+- [x] Publish a signed Android APK, SHA-256 checksum and release notes on GitHub.
+- [x] Verify the matching local APK's hash, application ID, version, release signature and permissions; see [release status](RELEASE_STATUS.md). A fresh remote download was not verified.
+- [ ] Repeat `npm ci`, `npm test`, `npm run typecheck`, `npm run lint`, and `npm run export` on Linux x86_64.
+- [ ] Complete the clean Linux unsigned release build and dependency/provenance review; retain source commit and logs.
 - [ ] Complete and attach the physical-device acceptance record above.
 - [ ] Finalize MIT/asset attribution, README installation instructions, privacy documentation, listing metadata and screenshots.
-- [ ] Select the durable release key/update strategy; verify and back up its certificate/key.
-- [ ] Confirm public repository access and create `v0.1.0` pointing to the tested release commit.
-- [ ] Publish a GitHub Release containing the signed APK, checksum, release notes and signing certificate fingerprint; verify a downloaded copy.
+- [ ] Confirm release-key backup/recovery and the F-Droid signing strategy; publish the certificate fingerprint with the release and verify a downloaded APK.
 - [ ] Complete the F-Droid build recipe and submit one RFP or `fdroiddata` merge request; record its URL.
 - [ ] Track maintainer feedback, official build success and the public F-Droid app URL separately from upstream release completion.
 
-Do not create the tag from an uncommitted working tree or claim F-Droid publication while review is pending. Google Play distribution, Android widgets and future developer-verification changes are outside this release.
+For future releases, build from a clean committed tree, record the tested commit, and tag that commit. Keep existing published tags unchanged. F-Droid publication requires its own review and build results. Google Play distribution, Android widgets and future developer-verification changes are outside this release.

@@ -96,12 +96,13 @@ export function chartTickIndexes(length: number, maximumTicks = 5) {
   return Array.from({ length: count }, (_, index) => Math.round(index * (length - 1) / (count - 1 || 1)));
 }
 
-export function TrendChart({ points, bucket, series, accessibilityLabel, height = defaultChartHeight, comparisonValues, comparisonLabel, timeZone, fullDay = false, comparisonPoints, interactive = false }: {
+export function TrendChart({ points, bucket, series, accessibilityLabel, height: requestedHeight = defaultChartHeight, availableHeight, comparisonValues, comparisonLabel, timeZone, fullDay = false, comparisonPoints, interactive = false }: {
   points: TrafficPoint[];
   bucket: AnalyticsBucket;
   series: TrendSeries[];
   accessibilityLabel: string;
   height?: number;
+  availableHeight?: number;
   comparisonValues?: (number | null)[];
   comparisonLabel?: string;
   timeZone?: string;
@@ -112,6 +113,10 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height 
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const [width, setWidth] = useState(initialChartWidth);
+  const [detailsHeight, setDetailsHeight] = useState(0);
+  // Measure labels, legend and inspection content, including Dynamic Type and
+  // the extra comparison row after selection, before allocating plot space.
+  const height = availableHeight === undefined ? requestedHeight : Math.max(80, availableHeight - detailsHeight - spacing.sm);
   const [selection, setSelection] = useState<number | null>(null);
   const gradientId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const day = fullDay && timeZone && bucket === 'hour' ? dailyChartData(points, comparisonPoints, timeZone, new Date(), series[0]?.metric) : null;
@@ -193,6 +198,7 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height 
       }}>
       {drawing}
     </Pressable> : <View accessibilityRole="image" accessibilityLabel={accessibilityLabel}>{drawing}</View>}
+    <View style={styles.details} onLayout={event => setDetailsHeight(event.nativeEvent.layout.height)}>
     <View style={styles.axis}>{ticks.map(index => <Text key={index} style={styles.axisText}>{day ? `${String(index).padStart(2, '0')}:00` : timeLabel(points[index].time, bucket)}</Text>)}</View>
     {comparisonLabel && previousPath ? <View style={styles.legend}>
       <View style={[styles.legendSolid, { borderColor: lines[0]?.color }]} /><Text style={styles.legendText}>Today</Text>
@@ -202,6 +208,7 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height 
       <Text accessibilityLiveRegion="polite" style={styles.inspectionText}>{selectedSummary || 'Tap the chart to inspect a time bucket'}</Text>
       {selectedIndex !== null && previousPath && previousValues?.[selectedIndex] != null ? <Text style={styles.axisText}>{comparisonLabel}: {formatMetricValue(previousValues[selectedIndex], series[0].metric)}</Text> : null}
     </View> : null}
+    </View>
   </View>;
 }
 
@@ -213,6 +220,7 @@ export const visitorsSeries: TrendSeries[] = [{ metric: 'users', fill: true }];
 
 const themedStyles = createThemedStyles(colors => ({
   chart: { gap: spacing.sm },
+  details: { gap: spacing.sm },
   axis: { flexDirection: 'row', justifyContent: 'space-between' },
   axisText: { color: colors.muted, fontSize: 11, fontVariant: ['tabular-nums'] },
   legend: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },

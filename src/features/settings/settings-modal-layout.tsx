@@ -28,6 +28,7 @@ export default function SettingsModalLayout() {
   return <>
     <Stack.Screen options={{ gestureEnabled: site !== null }} />
     <Stack screenOptions={{
+      orientation: 'portrait',
       presentation: 'card',
       headerStyle: { backgroundColor: process.env.EXPO_OS === 'ios' ? 'transparent' : colors.background },
       ...(process.env.EXPO_OS === 'ios' ? { headerTransparent: true,

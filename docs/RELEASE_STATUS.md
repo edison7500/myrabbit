@@ -1,6 +1,31 @@
-# v0.1.0 preparation status
+# v0.1.0 release and F-Droid status
 
-Recorded on **2026-10-21**. This is a working-tree preparation record, not a signed release, device-test report or F-Droid approval.
+Updated on **2026-10-26** after reviewing the public repository, GitHub release and matching local APK. Linux x86_64 validation is the next planned step and has not been run. This record does not establish F-Droid acceptance or physical-device behavior.
+
+## Published Android release
+
+- Public source: [edison7500/myrabbit](https://github.com/edison7500/myrabbit), under MIT with retained Expo notices.
+- [v0.1.0](https://github.com/edison7500/myrabbit/releases/tag/v0.1.0) was published on **2026-10-23**. Its tag resolves to `7e13d3c3abd287514d2eca803416922ad0fec069`.
+- Release assets: `MyRabbit-0.1.0-1-release.apk` and `MyRabbit-0.1.0-1-release.apk.sha256`.
+- APK SHA-256: `42c2e5bbc353264d4842c92e65174a0a0457e28bff02dd12f9cf91387ccfa123`.
+- Signing certificate SHA-256: `82e57d1ffb7b36872ef5e60c9aed49436997a79d6dda8dfd9677dd99ade07ea6`.
+
+The local release APK's computed hash matches the published GitHub asset digest. Android build tools verified its APK Signature Scheme v2 signature, certificate name `CN=MyRabbit Release` and RSA 4096-bit key. This review did not download the remote APK again or verify keystore backup/recovery.
+
+| APK property | Verified value |
+| --- | --- |
+| Application ID | `im.jiaxin.myrabbit` |
+| Version name / code | `0.1.0` / `1` |
+| Minimum / target SDK | `24` / `36` |
+| Included ABIs | `armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64` |
+| Permissions | Internet, vibration, network state, biometric/fingerprint and the app's generated non-exported receiver permission |
+| Blocked template permissions | External-storage read/write and system overlay are absent from the inspected APK |
+
+### Source provenance to resolve
+
+The matching local APK's ignored `.build-info.json` records `sourceCommit: 0acfd636643841081cb5c71eb114f1d60a8293d6`, `workingTreeDirty: true` and `platform: darwin`. The published tag points to the later `7e13d3c…` commit. This does not prove the source contents differ, but a clean build of the tagged source has not been demonstrated.
+
+Follow [Linux x86_64 build validation](LINUX_BUILD.md), retain the clean source commit and logs, and investigate differences before claiming reproducibility or upstream signature reuse. An unsigned rebuild will have a different whole-file hash from a signed APK. Keep the existing release/tag intact; source fixes should receive a new release and increased version code.
 
 ## Prepared
 
@@ -12,7 +37,9 @@ Recorded on **2026-10-21**. This is a working-tree preparation record, not a sig
 - MIT app notice alongside the retained Expo notice, Android listing text, 512 px icon derived from the existing logo, initial changelog, privacy documentation and signing/update guidance.
 - Disabled F-Droid build metadata draft, with missing toolchain/scanner/release prerequisites documented.
 
-## Checks performed
+## Earlier preparation checks
+
+The following results were recorded on **2026-10-21**, before publication. They have not been rerun on Linux or against the final release tag as part of this documentation update:
 
 | Check | Result / limit |
 | --- | --- |
@@ -22,20 +49,22 @@ Recorded on **2026-10-21**. This is a working-tree preparation record, not a sig
 | `npm run typecheck` / `npm run lint` | Passed |
 | `npm run export` | iOS, Android and static web bundles passed; this does not build/install an APK |
 | Android Expo prebuild | Passed; generated `versionName` is `0.1.0`, signing override and SecureStore backup references are present, blocked permissions use manifest removal directives |
-| Android autolinking resolution | 17 modules resolved; `configuration.buildFromSource` is `[".*"]`; native Gradle compilation is not yet verified |
+| Android autolinking resolution | 17 modules resolved; `configuration.buildFromSource` is `[".*"]`; this check did not verify actual Gradle dependency selection |
 | npm license metadata | All 886 lockfile package entries have recorded license expressions; no missing license field or proprietary expression was identified in that metadata review. This is not a source/license or native dependency audit |
 | Selected dependency checks | `expo-updates`, `expo-dev-client` and `@react-native-firebase/app` were absent in the installed dependency tree; this is not a complete tracking-SDK/APK scan |
 | npm software bill of materials | Generated CycloneDX 1.5 inventory at `artifacts/release-audit/npm-sbom.cdx.json` with 792 components from this installed macOS npm tree; Android/Maven dependencies are not included |
 
-## Blocked or pending
+## Remaining F-Droid work
 
-- **Android SDK / APK build:** the initial standalone tools download timed out. The maintainer subsequently provided the Homebrew SDK root `/opt/homebrew/share/android-commandlinetools`; its command-line tools 22.0 run with OpenJDK 17. CMake 3.30.5 is installed and verified. The remaining requested SDK components and Gradle 9.3.1 are downloading over a slow direct connection; no proxy is configured. Neither a debug nor release APK has been produced yet.
-- **Device and screenshots:** no physical Android device flow has been tested; real Android screenshots remain missing. Complete the [device acceptance record](ANDROID_RELEASE.md#device-acceptance-record).
-- **Signing:** no durable upstream keystore was created or supplied. Do not share its passwords in this repository or chat. Choose/store the key locally and verify its public certificate before publication.
+- **Linux x86_64:** the target machine runs Debian 13 amd64. Its standard APT repository has no `openjdk-17-jdk`; the [guide](LINUX_BUILD.md#install-jdk-17-on-debian-13) uses a checksum-verified Temurin 17 JDK archive to satisfy React Native's explicit toolchain request. Build the tagged source in a fresh checkout and record OS/host architecture, Node/npm, JDK, SDK/NDK/CMake, Gradle, npm checks, the unsigned APK and native dependency reports. No Linux result is recorded yet.
+- **F-Droid recipe and scanners:** the draft still contains a commit placeholder and both disable reasons. It checks exact Node/npm/Gradle versions without provisioning them. Complete approved toolchain provisioning and pass metadata lint, source/APK scanning and the build in the F-Droid environment.
+- **Device and screenshots:** no completed physical-device acceptance record is available in the repository; real Android screenshots remain missing. Complete the [device acceptance record](ANDROID_RELEASE.md#device-acceptance-record).
+- **Signing:** an upstream release signature now exists. Confirm backup/recovery of that same key, publish its certificate fingerprint with the release, and decide whether F-Droid uses a separate signature or verified upstream signature reuse. Byte-for-byte reproducibility is encouraged, not a general inclusion requirement.
 - **Native dependency compliance:** Expo packages contain precompiled `local-maven-repo` AAR/source JAR copies even when source builds are selected. Native npm tools, Hermes/React Native artifacts, Maven dependencies and final APK permissions/network behavior still need F-Droid source/APK scanning and provenance review. No scanner exceptions have been added.
 - **Artwork/attribution:** the existing logo has been reused; its origin and redistribution rights need maintainer confirmation. Complete third-party attribution against the actual Android dependency graph.
-- **Public source / history:** an unauthenticated GitHub repository API request returned 404, so public availability is not confirmed. The connected GitHub metadata request did not complete. Visibility has not been changed, and tracked files/Git history have not received a complete secret audit.
-- **Release commit:** pre-existing uncommitted feature/documentation changes are present. This work preserves them. Select and commit the intended release contents before tagging; no tag or GitHub Release has been created.
-- **F-Droid:** toolchain provisioning, immutable commit selection, source/APK scanners, Linux build, reproducibility comparison and update detection remain pending. Local Git history starts on 2026-09-05, less than three months before this record; verify the [policy's development-age requirement or a documented exception](https://f-droid.org/docs/Inclusion_Policy/) before requesting inclusion. No RFP/MR has been submitted and no official listing exists as a result of this preparation.
+- **Public history:** source and tag availability are confirmed. A complete tracked-file/Git-history secret audit remains unrecorded.
+- **Updates:** validate extraction of `expo.version` and `expo.android.versionCode` from `app.json` and configure tag-based updates. The draft currently sets both update modes to `None`.
+- **Policy:** the [inclusion policy](https://f-droid.org/docs/Inclusion_Policy/) normally requires three months of active development, with exceptions for established users, authors maintaining other F-Droid apps, or event-specific apps. History begins on **2026-09-05**; three calendar months from that date is **2026-12-05**. The initial commit date alone does not establish three months of active development. Ask maintainers to assess an applicable exception or development evidence.
+- **Submission:** no RFP/MR URL or official listing is recorded in this repository. External submission status was not conclusively verified; check existing submissions before creating one. An RFP can request packaging help or policy clarification while validation is pending.
 
-Continue with the [release gates](ANDROID_RELEASE.md#release-gates) and [packaging draft notes](../fdroid/README.md). Separate successful upstream release preparation/submission from the external F-Droid review and publication outcome.
+Continue with the [release and packaging gates](ANDROID_RELEASE.md#release-and-packaging-gates) and [packaging draft notes](../fdroid/README.md). Record the Linux result, F-Droid review, official build and public listing independently.
