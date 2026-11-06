@@ -38,7 +38,7 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
   const styles = themedStyles[scheme];
   const router = useRouter();
   const { fontScale } = useWindowDimensions();
-  const { site, dateRange: range, timeZone, analyticsContext, selectDateRange } = useSession();
+  const { site, dateRange: range, timeZone, analyticsContext, selectDateRange, selectFilters } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [previousOverview, setPreviousOverview] = useState<Overview | null>(null);
   const [error, setError] = useState('');
@@ -113,7 +113,7 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
 
   const rangeName = dateRangeLabel(range);
   return <Screen tabScreen navigationHeader title="Dashboard" description={
-    <AnalyticsControls siteLabel={siteHeading(site)} range={range} timeZone={timeZone} disabled={loading || refreshing} onRangeChange={changeRange} />
+    <AnalyticsControls siteLabel={siteHeading(site)} range={range} timeZone={timeZone} filters={analyticsContext?.filters} onFiltersChange={selectFilters} disabled={loading || refreshing} onRangeChange={changeRange} />
   } refreshing={refreshing} onRefresh={refresh}>
     {loading ? <LoadingState variant="cards" message={`Loading ${rangeName.toLowerCase()} analytics…`} /> : null}
     {error ? <ErrorState message={error} onRetry={refreshing ? undefined : refresh} /> : null}

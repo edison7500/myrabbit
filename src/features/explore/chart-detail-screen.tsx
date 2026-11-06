@@ -9,6 +9,7 @@ import { getCompleteRanking, getExploreRanking, type RankingKind } from '@/api/r
 import { AnalyticsControls } from '@/components/analytics-controls';
 
 import { siteHeading } from '@/features/overview/overview-state';
+import { toggleAnalyticsFilter } from './analytics-filters';
 import { useSession } from '@/stores/session';
 import { ChartStatus, RankingBar, rankingSections, type RankingSection } from './explore-charts';
 import { useChartResource } from './use-chart-resource';
@@ -27,13 +28,14 @@ export default function ChartDetailScreen(props: Props) {
 }
 
 function DetailControls() {
-  const { site, dateRange, timeZone, selectDateRange } = useSession();
-  return <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} onRangeChange={selectDateRange} />;
+  const { site, dateRange, timeZone, selectDateRange, analyticsContext, selectFilters } = useSession();
+  return <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} filters={analyticsContext?.filters} onFiltersChange={selectFilters} onRangeChange={selectDateRange} />;
 }
 
 function RankingDetail({ context, section, initialKind, load }: {
   context: AnalyticsQueryContext; section: RankingSection; initialKind?: RankingKind; load: typeof getExploreRanking;
 }) {
+  const { selectFilters } = useSession();
   const { scheme } = useTheme();
   const styles = themedStyles[scheme];
   const { title, choices, eventCounts } = rankingSections[section];
@@ -58,7 +60,7 @@ function RankingDetail({ context, section, initialKind, load }: {
   </View>;
   return <SafeAreaView style={styles.safe} edges={{ top: 'off', bottom: 'additive', left: 'additive', right: 'additive' }}>
     <FlatList data={items} keyExtractor={item => item.value} contentContainerStyle={styles.content}
-      renderItem={({ item }) => <RankingBar item={item} kind={kind} maximum={maximum} firstPercentage={items[0]?.percentage} eventCounts={eventCounts} />}
+      renderItem={({ item }) => <RankingBar item={item} kind={kind} maximum={maximum} firstPercentage={items[0]?.percentage} eventCounts={eventCounts} onSelect={kind === 'browser' ? value => selectFilters(toggleAnalyticsFilter(context.filters, 'browser', value)) : undefined} />}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
       ListHeaderComponent={header}
       ListFooterComponent={items.length ? <Text style={styles.footer}>Showing {items.length.toLocaleString()} {selectedLabel.toLowerCase()}{resource.loading ? ' · Updating…' : ''}</Text> : null}

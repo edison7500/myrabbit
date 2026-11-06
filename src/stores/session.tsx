@@ -3,6 +3,7 @@ import { analyticsTimeZone, type AnalyticsDateRange } from '@/api/rybbit/date-ra
 import { isValidAnalyticsTimeZone, type AnalyticsFilter, type AnalyticsQueryContext } from '@/api/rybbit/analytics-context';
 import { getSites, type Site } from '@/api/rybbit/client';
 import { clearConnection, loadConnection } from '@/storage/connection';
+import { loadDateRange, saveDateRange } from '@/storage/date-range';
 import { clearSelectedSite, restoreSelectedSite, saveSelectedSite } from '@/storage/selected-site';
 import { setWidgetContext } from '@/features/widgets/widget-sync';
 
@@ -35,8 +36,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
     const controller = new AbortController();
     async function restore() {
       const restoredTimeZone = analyticsTimeZone();
-      const config = await loadConnection();
+      const [config, restoredDateRange] = await Promise.all([
+        loadConnection().catch(() => null),
+        loadDateRange().catch(() => ({ preset: 'today' as const })),
+      ]);
       if (!active) return;
+      setDateRange(restoredDateRange);
       if (!config?.apiKey.trim()) { setWidgetContext(null, null, restoredTimeZone); return; }
       setServerUrl(config.baseUrl);
       const restored = await restoreSelectedSite(config.baseUrl, getSites, controller.signal);
@@ -44,6 +49,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
     restore().catch(() => {}).finally(() => { if (active) setReady(true); });
     return () => { active = false; controller.abort(); };
+  }, []);
+
+  const selectDateRange = useCallback((range: AnalyticsDateRange) => {
+    setDateRange(range);
+    void saveDateRange(range).catch(() => {});
   }, []);
 
   const selectSite = useCallback(async (nextSite: Site) => {
@@ -62,7 +72,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
     setSite(null);
     setServerUrl(null);
     setFilters([]);
-    setDateRange({ preset: 'today' });
   }
 
   function selectTimeZone(nextTimeZone: string) {
@@ -74,7 +83,6 @@ export function SessionProvider({ children }: PropsWithChildren) {
   async function connected(url: string) {
     setWidgetContext(null, null, timeZone);
     setSite(null);
-    setDateRange({ preset: 'today' });
     setFilters([]);
     setServerUrl(url);
     await clearSelectedSite().catch(() => {});
@@ -85,7 +93,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }) : null, [dateRange, filters, serverUrl, site, timeZone]);
 
   return <SessionContext value={{ ready, serverUrl, site, dateRange, timeZone, filters, analyticsContext,
-    selectDateRange: setDateRange, selectTimeZone, selectFilters: setFilters, selectSite, disconnect, connected }}>{children}</SessionContext>;
+    selectDateRange, selectTimeZone, selectFilters: setFilters, selectSite, disconnect, connected }}>{children}</SessionContext>;
 }
 
 export function useSession() {

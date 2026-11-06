@@ -11,6 +11,7 @@ const serverUrl = 'https://analytics.test';
 async function session({ saved = true, restoreSite = site, widgetFailure = false } = {}) {
   const contexts = []; let current;
   const load = createLoader({
+    '@/storage/date-range': { loadDateRange: async () => ({ preset: 'today' }), saveDateRange: async () => {} },
     '@/api/rybbit/client': { getSites: async () => [site] },
     '@/storage/connection': {
       loadConnection: async () => saved ? { baseUrl: serverUrl, apiKey: 'private-key' } : null,

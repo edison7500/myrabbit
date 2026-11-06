@@ -1,10 +1,10 @@
 import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
 import type { ReactElement, ReactNode } from 'react';
-import { Globe } from 'lucide-react-native';
-import { FlatList, Text, View } from 'react-native';
+import { FlatList, Pressable, Text, View } from 'react-native';
 
 import type { BreakdownItem } from '@/api/rybbit/breakdown';
+import { AnalyticsItemIcon } from '@/components/analytics-item-icon';
 import { layout, radii, spacing } from '@/constants/theme';
 
 type Props = {
@@ -16,32 +16,35 @@ type Props = {
   refreshing: boolean;
   onRefresh: () => void;
   onEndReached: () => void;
+  onSelect?: (value: string) => void;
 };
 
-export function RankedRow({ item, label, ratio }: { item: BreakdownItem; label: string; ratio: number }) {
-  const { colors, scheme } = useTheme();
+export function RankedRow({ item, label, ratio, onSelect }: { item: BreakdownItem; label: string; ratio: number; onSelect?: (value: string) => void }) {
+  const { scheme } = useTheme();
   const styles = themedStyles[scheme];
   const barWidth = Math.min(100, item.percentage * ratio);
-  return <View accessible accessibilityLabel={`${label}, ${item.count.toLocaleString()} sessions`} style={styles.row}>
+  const Container = onSelect ? Pressable : View;
+  return <Container accessible accessibilityRole={onSelect ? 'button' : undefined} accessibilityHint={onSelect ? 'Filter analytics by this source' : undefined}
+    onPress={onSelect ? () => onSelect(item.value) : undefined} accessibilityLabel={`${label}, ${item.count.toLocaleString()} sessions`} style={styles.row}>
     <View style={styles.rowContent}>
-      <View accessible={false} style={styles.sourceIcon}><Globe size={17} strokeWidth={1.8} color={colors.accent} accessible={false} /></View>
-      <Text selectable numberOfLines={2} style={styles.label}>{label}</Text>
-      <Text selectable accessibilityLabel={`${item.count.toLocaleString()} sessions`} style={styles.count}>{item.count.toLocaleString()}</Text>
+      <AnalyticsItemIcon kind="referrer" value={item.value} />
+      <Text selectable={!onSelect} numberOfLines={2} style={styles.label}>{label}</Text>
+      <Text selectable={!onSelect} accessibilityLabel={`${item.count.toLocaleString()} sessions`} style={styles.count}>{item.count.toLocaleString()}</Text>
     </View>
     <View accessible={false} style={styles.barTrack}>
       <View accessible={false} style={[styles.bar, { width: `${barWidth}%` }]} />
     </View>
-  </View>;
+  </Container>;
 }
 
-export function RankedList({ items, getLabel, header, empty, footer, refreshing, onRefresh, onEndReached }: Props) {
+export function RankedList({ items, getLabel, header, empty, footer, refreshing, onRefresh, onEndReached, onSelect }: Props) {
   const { scheme } = useTheme();
   const styles = themedStyles[scheme];
   const ratio = items[0]?.percentage ? 100 / items[0].percentage : 1;
   return <FlatList
     data={items}
     keyExtractor={item => item.value}
-    renderItem={({ item }) => <RankedRow item={item} label={getLabel(item)} ratio={ratio} />}
+    renderItem={({ item }) => <RankedRow item={item} label={getLabel(item)} ratio={ratio} onSelect={onSelect} />}
     ItemSeparatorComponent={() => <View style={styles.separator} />}
     ListHeaderComponent={header}
     ListEmptyComponent={empty}
@@ -67,8 +70,6 @@ const themedStyles = createThemedStyles(colors => ({
   row: { minHeight: 64, paddingHorizontal: 16, paddingVertical: 12, borderRadius: radii.card, borderCurve: 'continuous',
     backgroundColor: colors.surface, gap: 9 },
   rowContent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sourceIcon: { width: 32, height: 32, borderRadius: 10, borderCurve: 'continuous',
-    alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSurface },
   barTrack: { height: 4, borderRadius: 2, overflow: 'hidden', backgroundColor: colors.accentSurface },
   bar: { height: '100%', borderRadius: 2, backgroundColor: colors.accent },
   label: { flex: 1, minWidth: 0, color: colors.text, fontSize: 15, lineHeight: 20, fontWeight: '500' },

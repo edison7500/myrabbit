@@ -12,13 +12,14 @@ export function ReferrersHeading({ onOpen }: { onOpen: () => void }) {
   return <SectionHeading title="Referrers" icon={Link2} accessibilityLabel="See all referrers" onPress={onOpen} />;
 }
 
-export function ReferrersPreview({ page, loading, error, onRetry, onOpen, showHeader = true }: {
+export function ReferrersPreview({ page, loading, error, onRetry, onOpen, showHeader = true, onSelect }: {
   page: BreakdownPage | null;
   loading: boolean;
   error: string;
   onRetry: () => void;
   onOpen: () => void;
   showHeader?: boolean;
+  onSelect?: (value: string) => void;
 }) {
   const { scheme } = useTheme();
   const styles = themedStyles[scheme];
@@ -34,7 +35,7 @@ export function ReferrersPreview({ page, loading, error, onRetry, onOpen, showHe
     </View> : null}
     {!loading && !error && page && items.length === 0 ? <Text style={styles.stateText}>No attributed referrers for this range.</Text> : null}
     {items.length ? <View style={styles.rows}>
-      {items.map(item => <RankedRow key={item.value} item={item} label={item.value} ratio={ratio} />)}
+      {items.map(item => <RankedRow key={item.value} item={item} label={item.value} ratio={ratio} onSelect={onSelect} />)}
     </View> : null}
   </View>;
 }

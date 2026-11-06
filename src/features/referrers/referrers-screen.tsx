@@ -13,6 +13,7 @@ import { AnalyticsControls } from '@/components/analytics-controls';
 import { EmptyState, ErrorState, LoadingState } from '@/components/content-state';
 
 import { siteHeading } from '@/features/overview/overview-state';
+import { toggleAnalyticsFilter } from '@/features/explore/analytics-filters';
 import { useSession } from '@/stores/session';
 import { RankedList, RankedListMessage } from './ranked-list';
 
@@ -35,6 +36,7 @@ function ReferrerBreakdown({ site, context: analyticsContext, dateRange, timeZon
   selectDateRange: (range: AnalyticsDateRange) => void;
   loadBreakdown: BreakdownLoader;
 }) {
+  const { selectFilters } = useSession();
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const [items, setItems] = useState<BreakdownItem[]>([]);
@@ -135,7 +137,7 @@ function ReferrerBreakdown({ site, context: analyticsContext, dateRange, timeZon
   }
 
   const header = <View style={styles.header}>
-    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone}
+    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} filters={analyticsContext.filters} onFiltersChange={selectFilters}
       disabled={loading || refreshing} onRangeChange={changeRange} />
     <View style={styles.sectionHeading}>
       <View style={styles.sectionCopy}>
@@ -166,7 +168,8 @@ function ReferrerBreakdown({ site, context: analyticsContext, dateRange, timeZon
 
   return <SafeAreaView style={styles.safe} edges={{ top: 'off', bottom: 'additive', left: 'additive', right: 'additive' }}>
     <RankedList items={items} getLabel={item => item.value} header={header} empty={empty} footer={footer}
-      refreshing={refreshing} onRefresh={refresh} onEndReached={loadMore} />
+      refreshing={refreshing} onRefresh={refresh} onEndReached={loadMore}
+      onSelect={value => selectFilters(toggleAnalyticsFilter(analyticsContext.filters, 'referrer', value))} />
   </SafeAreaView>;
 }
 

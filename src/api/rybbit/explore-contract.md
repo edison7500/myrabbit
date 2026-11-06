@@ -99,7 +99,7 @@ Web 分页规则：累加返回页的原始行数，达到最后一页 `totalCou
 - Web 默认紧凑数字格式，悬停显示完整 count；百分比悬停显示一位小数。移动端可以适配交互，但必须可访问完整原始 count；条宽不是用户占比这一新指标。
 - Pages 可以适配长文本布局，但原始 pathname 必须保留用于键、可访问性和未来筛选。Browsers 的 `Chrome`、`Mobile Chrome` 等不合并。
 - Country 展示采用 `new Intl.DisplayNames(['en'], { type: 'region' })`，传入大写代码；原始 value 不改。不同运行时 ICU 名称可能有展示差异，先保留代码并在对照时记录，不能改变分组。
-- Web 点击行会切换该 parameter + 原始 value 的 equals filter。首期筛选 UI 不在范围内，可不提供行筛选交互，但不能把展示名称作为未来过滤值。
+- Web 点击行会切换该 parameter + 原始 value 的 equals filter。MyRabbit 已为来源和浏览器预览/完整列表接入此交互：不同维度组合，同一维度替换，再次点击同一值取消；其他维度暂不提供点击筛选。过滤值使用原始 value，不能使用展示名称。筛选条件在 Dashboard、Explore 和详情共享，页面显示可移除的条件标签；切换站点或连接时清空，不持久化。
 - Web 浏览器展开查询 `browser_version`，并附加 browser equals 筛选。MVP 可不做展开；不要预留假数据或不可用按钮。
 
 来源：[StandardSection][section]、[Row][row]、[展开表格默认排序][dialog]、[Countries][countries]、[名称转换][labels]。

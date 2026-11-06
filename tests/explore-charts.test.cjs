@@ -82,7 +82,7 @@ const mocks = {
   '@/components/screen': { Screen: ({ description, sections = [] }) => React.createElement('Screen', null, description, sections.map(section => React.createElement('Section', { key: section.key }, section.header, section.content))) },
   '@/stores/session': { useSession: () => ({ analyticsContext: context, site: { id: context.siteId, name: 'Site', domain: 'site.test' }, dateRange: context.dateRange, timeZone: context.timeZone, selectDateRange: () => {} }) },
   '@expo/ui': { Host: 'Host', Picker },
-  'lucide-react-native': Object.fromEntries(['ChartNoAxesColumn', 'Globe', 'Laptop', 'FileText', 'ChevronRight', 'MousePointerClick'].map(name => [name, name])),
+  'lucide-react-native': Object.fromEntries(['ChartNoAxesColumn', 'Globe', 'Laptop', 'FileText', 'ChevronRight', 'MousePointerClick', 'AppWindow', 'ArrowUpRight', 'Bot', 'Circle', 'CircleDot', 'Code2', 'Compass', 'Cpu', 'Flame', 'Gamepad2', 'Grid2X2', 'Mail', 'MessagesSquare', 'Monitor', 'MonitorSmartphone', 'Orbit', 'Play', 'Rss', 'ScanLine', 'Search', 'Shield', 'Smartphone', 'Tablet', 'Terminal', 'Tv', 'Watch'].map(name => [name, name])),
   '@/components/loading-skeleton': { LoadingSkeleton: props => React.createElement('Skeleton', props) },
   '@/storage/connection': { loadConnection: async () => null },
 };
@@ -166,6 +166,35 @@ test('all ranking previews cap at five and chevrons open the selected category',
 
 native.FlatList = ({ data, renderItem, ListHeaderComponent, ListFooterComponent, ...props }) => React.createElement('FlatList', props,
   ListHeaderComponent, data.map((item, index) => React.createElement(React.Fragment, { key: item.value }, renderItem({ item, index }))), ListFooterComponent);
+
+test('Technology previews and detail lists share item icons for each category', async t => {
+  const load = createLoader(mocks);
+  const { ExploreCharts } = load('src/features/explore/explore-charts.tsx');
+  const Detail = load('src/features/explore/chart-detail-screen.tsx').default;
+  const choices = [
+    ['Browsers', 'browser', 'IE11', 'Orbit'], ['Devices', 'device_type', 'mobile', 'Smartphone'],
+    ['Operating Systems', 'operating_system', 'Windows 11', 'Grid2X2'], ['Screen Dimensions', 'dimensions', '1920x1080', 'ScanLine'],
+  ];
+  const loadRanking = async (query, kind) => {
+    const choice = choices.find(([, value]) => value === kind);
+    return { items: choice ? [{ value: choice[2], count: 12 }] : [], totalCount: choice ? 1 : 0, nextPage: null };
+  };
+  let preview; let detail;
+  await act(async () => { preview = create(React.createElement(ExploreCharts, { context, loadRanking, loadWeekly: async () => [] })); });
+  t.after(async () => { await act(async () => { preview.unmount(); detail?.unmount(); }); });
+  for (const [label, kind, value, icon] of choices) {
+    await act(async () => preview.root.findByProps({ accessibilityLabel: `Technology: ${label}` }).props.onPress());
+    await act(async () => {
+      detail = detail || create(null);
+      detail.update(React.createElement(Detail, { key: kind, section: 'technology', kind, loadRanking }));
+    });
+    for (const tree of [preview, detail]) {
+      const row = tree.root.findByProps({ accessibilityLabel: `${value}, 12 sessions` });
+      assert.equal(row.findByType(icon).props.accessible, false);
+      assert.equal(row.props.accessible, true);
+    }
+  }
+});
 
 test('Content previews all five tabs with five rows and opens the active tab in a complete detail list', async t => {
   const load = createLoader(mocks);

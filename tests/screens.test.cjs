@@ -20,7 +20,7 @@ native.FlatList = ({ data = [], renderItem, ListHeaderComponent, ListEmptyCompon
     data.length ? null : slot(ListEmptyComponent),
     slot(ListFooterComponent));
 const Picker = Object.assign(({ children, ...props }) => React.createElement('Picker', props, children), { Item: 'PickerItem' });
-const icons = Object.fromEntries(['Users', 'Repeat2', 'Layers', 'CornerUpLeft', 'Timer', 'CalendarDays', 'ChartSpline', 'ChevronDown', 'ChevronRight', 'Globe', 'Link2', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Eye', 'EyeOff', 'ShieldCheck', 'Maximize2', 'Minimize2', 'FileText', 'Laptop', 'MousePointerClick', 'ChartNoAxesColumn', 'X'].map(name => [name, name]));
+const icons = Object.fromEntries(['Users', 'Repeat2', 'Layers', 'CornerUpLeft', 'Timer', 'CalendarDays', 'ChartSpline', 'ChevronDown', 'ChevronRight', 'Globe', 'Link2', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Eye', 'EyeOff', 'ShieldCheck', 'Maximize2', 'Minimize2', 'FileText', 'Laptop', 'MousePointerClick', 'ChartNoAxesColumn', 'X', 'AppWindow', 'ArrowUpRight', 'Bot', 'Circle', 'CircleDot', 'Code2', 'Compass', 'Cpu', 'Flame', 'Gamepad2', 'Grid2X2', 'Mail', 'MessagesSquare', 'Monitor', 'MonitorSmartphone', 'Orbit', 'Play', 'Rss', 'ScanLine', 'Search', 'Shield', 'Smartphone', 'Tablet', 'Terminal', 'Tv', 'Watch'].map(name => [name, name]));
 let exploreHeaderOptions = {};
 const headerNavigation = { setOptions: options => { exploreHeaderOptions = { ...exploreHeaderOptions, ...options }; } };
 const Link = ({ children, ...props }) => React.createElement('Link', props, children);
@@ -547,7 +547,8 @@ test('Dashboard cancels an active refresh when leaving the screen', async () => 
   await act(async () => tree.unmount()); assert.equal(signal.aborted, true);
 });
 
-test('an Explore traffic failure keeps Referrers usable and can be retried independently', async () => {
+test('an Explore traffic failure keeps Referrers usable and can be retried independently', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-01-01T01:30:00Z') });
   const load = createLoader({ ...baseMocks, '@/stores/session': dashboardSession({ id: '1', name: 'Site', domain: 'site.test' }) });
   const { Explore } = load('src/features/explore/explore-screen.tsx');
   let fail = true;
@@ -561,7 +562,9 @@ test('an Explore traffic failure keeps Referrers usable and can be retried indep
   assert.doesNotMatch(text(tree.toJSON()), /Chart unavailable/);
   assert.ok(tree.root.findAllByProps({ accessibilityLabel: 'Traffic trend with 1 time buckets' }).some(node => node.props.accessibilityRole === 'image'));
   const paths = tree.root.findAllByType('Path');
-  assert.equal(paths.length, 2); assert.notEqual(paths[0].props.stroke, paths[1].props.stroke);
+  const solid = paths.filter(node => node.props.stroke && !node.props.strokeDasharray);
+  assert.equal(solid.length, 2); assert.notEqual(solid[0].props.stroke, solid[1].props.stroke);
+  assert.match(text(tree.toJSON()), /00:00.*24:00/);
   for (const path of paths) assert.doesNotMatch(path.props.d, /NaN/);
   await act(async () => tree.unmount());
 });
@@ -613,7 +616,8 @@ test('Visitors detail handles empty and error results', async () => {
   await act(async () => failed.unmount());
 });
 
-test('Traffic detail shows both real series and follows the shared date range', async () => {
+test('Traffic detail shows both real series and follows the shared date range', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-01-01T01:30:00Z') });
   const load = createLoader({ ...baseMocks, 'expo-router': { Link, Redirect: 'Redirect' },
     '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }) });
   const Detail = load('src/features/overview/traffic-detail-screen.tsx').default;
@@ -627,7 +631,9 @@ test('Traffic detail shows both real series and follows the shared date range', 
   assert.equal(tree.root.findByProps({ accessibilityLabel: 'Loading traffic…' }).props.accessibilityRole, 'progressbar');
   assert.equal(requests[0].context.siteId, 'site-1');
   await act(async () => { pending[0].resolve(points); });
-  assert.equal(tree.root.findAllByType('Path').filter(node => node.props.stroke).length, 2);
+  assert.equal(tree.root.findAllByType('Path').filter(node => node.props.stroke && !node.props.strokeDasharray).length, 2);
+  assert.equal(tree.root.findAllByType('Path').filter(node => node.props.strokeDasharray).length, 2);
+  assert.match(text(tree.toJSON()), /00:00.*24:00/);
   assert.ok(tree.root.findByProps({ accessibilityLabel: 'Traffic trend with 2 time buckets' }));
   await act(async () => { datePicker(tree).props.onValueChange('last-7-days'); });
   assert.deepEqual(requests[1].context.dateRange, { preset: 'last-7-days' });
@@ -642,6 +648,37 @@ test('Traffic detail shows both real series and follows the shared date range', 
   assert.equal(tree.root.findAllByType('Path').filter(node => node.props.stroke).length, 2);
   await act(async () => tree.unmount());
   assert.equal(requests[1].signal.aborted, true);
+});
+
+test('Explore and Traffic details show complete calendar axes even when the server stops at the current bucket', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-28T05:58:00Z') });
+  for (const [preset, first, last, time] of [
+    ['today', '00:00', '24:00', '2026-10-28 13:00:00'],
+    ['this-week', '10-26', '11-01', '2026-10-28 00:00:00'],
+    ['this-month', '10-01', '10-31', '2026-10-28 00:00:00'],
+  ]) {
+    const dateRange = { preset };
+    const timeZone = 'Asia/Hong_Kong';
+    const site = { id: 'site-1', name: 'Site', domain: 'site.test' };
+    const analyticsContext = { serverUrl: 'https://example.test', siteId: site.id, dateRange, timeZone, filters: [] };
+    const load = createLoader({ ...baseMocks,
+      'expo-router': { ...baseMocks['expo-router'], Redirect: 'Redirect' },
+      '@/stores/session': { useSession: () => ({ site, dateRange, timeZone, analyticsContext, selectDateRange: () => {} }) },
+    });
+    const { Explore } = load('src/features/explore/explore-screen.tsx');
+    const Detail = load('src/features/overview/traffic-detail-screen.tsx').default;
+    const loadTraffic = async () => [{ time, users: 7, pageviews: 11 }];
+    for (const [Component, props] of [[Explore, { loadOverview: async () => ({ users: 7, pageviews: 11 }), loadTraffic }], [Detail, { loadTraffic }]]) {
+      let tree;
+      await act(async () => { tree = create(React.createElement(Component, props)); });
+      const chart = tree.root.findByType(load('src/features/overview/traffic-chart.tsx').TrendChart);
+      const labels = chart.findAllByType('Text').map(node => text(node)).filter(label => /^\d{2}[:\-]\d{2}$/.test(label));
+      assert.equal(labels[0], first, `${Component.name} ${preset} starts at the period boundary`);
+      assert.equal(labels.at(-1), last, `${Component.name} ${preset} ends at the period boundary`);
+      assert.equal(chart.findAllByType('Path').filter(node => node.props.strokeDasharray).length, 2);
+      await act(async () => tree.unmount());
+    }
+  }
 });
 
 test('Explore previews only five referrers and opens the full list', async () => {
@@ -962,6 +999,94 @@ test('all five additional KPI details render their own formatted series, inspect
     await act(async () => tree.root.findByProps({ accessibilityLabel: `Expand ${label} chart` }).props.onPress());
     assert.equal(tree.root.findAllByType('Svg').length, 2);
     assert.ok(text(tree.toJSON()).includes(`${label} trend`));
+    await act(async () => tree.unmount());
+  }
+});
+
+test('Explore source and browser clicks requery every section, cancel old requests and expose removable shared filters', async t => {
+  const Session = React.createContext(null);
+  const requests = [];
+  const remember = (kind, context, signal) => requests.push({ kind, context, signal });
+  const load = createLoader({ ...baseMocks,
+    '@/stores/session': { useSession: () => React.use(Session) },
+    '@/api/rybbit/client': {
+      ...baseMocks['@/api/rybbit/client'],
+      getOverview: async (context, signal) => { remember('overview', context, signal); return { users: 7, pageviews: 11 }; },
+      getTraffic: async (context, signal) => { remember('traffic', context, signal); return []; },
+    },
+    '@/api/rybbit/breakdown': { ...baseMocks['@/api/rybbit/breakdown'], getBreakdown: async ({ context }, signal) => {
+      remember('referrer', context, signal);
+      return { items: [{ value: 'google.com', count: 7, percentage: 100 }], totalCount: 1, nextPage: null };
+    } },
+    '@/api/rybbit/explore-charts': { ...baseMocks['@/api/rybbit/explore-charts'],
+      getExploreRanking: async (context, kind, signal) => { remember(kind, context, signal); return { items: kind === 'browser' ? [{ value: 'IE11', count: 7, percentage: 100 }] : [], totalCount: kind === 'browser' ? 1 : 0, nextPage: null }; },
+      getWeeklyTrend: async (context, signal) => { remember('weekly', context, signal); return []; },
+    },
+  });
+  const Explore = load('src/features/explore/explore-screen.tsx').default;
+  const Overview = load('src/features/overview/overview-screen.tsx').default;
+  function App({ dashboard = false }) {
+    const [filters, selectFilters] = React.useState([]);
+    const site = React.useMemo(() => ({ id: '1', name: 'Site', domain: 'site.test' }), []);
+    const dateRange = React.useMemo(() => ({ preset: 'today' }), []);
+    const analyticsContext = React.useMemo(() => ({ serverUrl: 'https://example.test', siteId: '1', dateRange, timeZone: 'UTC', filters }), [filters, dateRange]);
+    return React.createElement(Session, { value: { site, dateRange, timeZone: 'UTC', analyticsContext, filters, selectFilters, selectDateRange: () => {} } }, React.createElement(dashboard ? Overview : Explore));
+  }
+  let tree;
+  await act(async () => { tree = create(React.createElement(App)); });
+  t.after(async () => { await act(async () => tree.unmount()); });
+  const initial = requests.slice();
+  assert.equal(initial.length, 8);
+  async function click(label) {
+    await act(async () => tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === label).props.onPress());
+  }
+  await click('google.com, 7 sessions');
+  assert.equal(initial.every(request => request.signal.aborted), true);
+  let current = requests.slice(-8);
+  assert.equal(current.every(request => JSON.stringify(request.context.filters) === JSON.stringify([{ parameter: 'referrer', type: 'equals', value: ['google.com'] }])), true);
+  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Remove filter Source: google.com' }));
+  await click('IE11, 7 sessions');
+  current = requests.slice(-8);
+  assert.equal(current.every(request => request.context.filters.length === 2), true);
+  assert.deepEqual(current[0].context.filters.at(-1), { parameter: 'browser', type: 'equals', value: ['IE11'] });
+  await click('Remove filter Source: google.com');
+  assert.deepEqual(requests.at(-1).context.filters, [{ parameter: 'browser', type: 'equals', value: ['IE11'] }]);
+  await act(async () => tree.update(React.createElement(App, { dashboard: true })));
+  assert.match(text(tree.toJSON()), /Browser: IE11/);
+  await click('Clear all filters');
+  assert.deepEqual(requests.at(-1).context.filters, []);
+  assert.doesNotMatch(text(tree.toJSON()), /Browser: IE11/);
+});
+
+test('complete source and browser lists use raw row values and keep filters removable after an empty response', async t => {
+  for (const parameter of ['referrer', 'browser']) {
+    const Session = React.createContext(null);
+    const requests = [];
+    const value = parameter === 'referrer' ? 'google.com' : 'IE11';
+    const load = createLoader({ ...baseMocks, '@/stores/session': { useSession: () => React.use(Session) } });
+    const Detail = load(parameter === 'referrer' ? 'src/features/referrers/referrers-screen.tsx' : 'src/features/explore/chart-detail-screen.tsx').default;
+    const request = async (context, signal) => {
+      requests.push({ context, signal });
+      return { items: context.filters.length ? [] : [{ value, count: 7, percentage: 100 }], totalCount: context.filters.length ? 0 : 1, nextPage: null };
+    };
+    const props = parameter === 'referrer'
+      ? { loadBreakdown: ({ context }, signal) => request(context, signal) }
+      : { section: 'technology', kind: 'browser', loadRanking: (context, kind, signal) => request(context, signal) };
+    function App() {
+      const [filters, selectFilters] = React.useState([]);
+      const analyticsContext = React.useMemo(() => ({ serverUrl: 'https://example.test', siteId: '1', dateRange: { preset: 'today' }, timeZone: 'UTC', filters }), [filters]);
+      return React.createElement(Session, { value: { site: { id: '1', name: 'Site', domain: 'site.test' }, dateRange: analyticsContext.dateRange, timeZone: 'UTC', analyticsContext, selectFilters, selectDateRange: () => {} } }, React.createElement(Detail, props));
+    }
+    let tree;
+    await act(async () => { tree = create(React.createElement(App)); });
+    const original = requests[0];
+    await act(async () => tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === `${value}, 7 sessions`).props.onPress());
+    assert.equal(original.signal.aborted, true);
+    assert.deepEqual(requests.at(-1).context.filters, [{ parameter, type: 'equals', value: [value] }]);
+    const label = `Remove filter ${parameter === 'referrer' ? 'Source' : 'Browser'}: ${value}`;
+    assert.ok(tree.root.findByProps({ accessibilityLabel: label }));
+    await act(async () => tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === label).props.onPress());
+    assert.deepEqual(requests.at(-1).context.filters, []);
     await act(async () => tree.unmount());
   }
 });

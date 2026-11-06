@@ -11,6 +11,7 @@ import {
   type HourlyPoint, type RankingKind, type RankingItem, type WeeklyMetric,
 } from '@/api/rybbit/explore-charts';
 import { SectionHeading, Surface } from '@/components/analytics-ui';
+import { AnalyticsItemIcon } from '@/components/analytics-item-icon';
 import { LoadingSkeleton } from '@/components/loading-skeleton';
 import type { ScreenSection } from '@/components/screen';
 
@@ -57,15 +58,16 @@ export function rankingLabel(value: string, kind: RankingKind) {
   return value;
 }
 
-export function ExploreCharts({ context, ref, loadRanking = getExploreRanking, loadWeekly = getWeeklyTrend, children }: {
+export function ExploreCharts({ context, ref, loadRanking = getExploreRanking, loadWeekly = getWeeklyTrend, children, onBrowserSelect }: {
   context: AnalyticsQueryContext; ref?: Ref<ExploreChartsHandle>;
+  onBrowserSelect?: (value: string) => void;
   loadRanking?: typeof getExploreRanking; loadWeekly?: typeof getWeeklyTrend;
   children?: (sections: ScreenSection[]) => ReactNode;
 }) {
   const { scheme } = useTheme();
   const styles = themedStyles[scheme];
   const contentChart = useRankingSection('content', context, loadRanking);
-  const deviceChart = useRankingSection('technology', context, loadRanking);
+  const deviceChart = useRankingSection('technology', context, loadRanking, onBrowserSelect);
   const locationChart = useRankingSection('locations', context, loadRanking);
   const eventChart = useRankingSection('events', context, loadRanking);
   const weeklyChart = useWeeklySection(context, loadWeekly);
@@ -97,7 +99,7 @@ export function ChartStatus({ title, loading, error, empty, children, onRetry }:
   </>;
 }
 
-function useRankingSection(section: RankingSection, context: AnalyticsQueryContext, load: typeof getExploreRanking) {
+function useRankingSection(section: RankingSection, context: AnalyticsQueryContext, load: typeof getExploreRanking, onBrowserSelect?: (value: string) => void) {
   const { scheme } = useTheme();
   const styles = themedStyles[scheme];
   const router = useRouter();
@@ -123,14 +125,14 @@ function useRankingSection(section: RankingSection, context: AnalyticsQueryConte
       </ScrollView>
       <View style={styles.columnHeading}><Text style={styles.secondary}>{selectedLabel}</Text><Text style={styles.secondary}>{eventCounts ? 'Count' : 'Sessions'}</Text></View>
       <ChartStatus title={selectedLabel} loading={resource.loading} error={resource.error} empty={items.length === 0} onRetry={resource.reload}>
-        {visible.map(item => <RankingBar key={item.value} item={item} kind={kind} maximum={maximum} firstPercentage={items[0]?.percentage} eventCounts={eventCounts} />)}
+        {visible.map(item => <RankingBar key={item.value} item={item} kind={kind} maximum={maximum} firstPercentage={items[0]?.percentage} eventCounts={eventCounts} onSelect={kind === 'browser' ? onBrowserSelect : undefined} />)}
         {items.length ? <Text style={styles.caption}>Showing {visible.length} of {resource.data!.totalCount.toLocaleString()}{resource.loading ? ' · Updating…' : ''}</Text> : null}
       </ChartStatus>
     </Surface>;
   return { section: { key: title, header, content }, reload: resource.reload };
 }
 
-export function RankingBar({ item, kind, maximum, firstPercentage, eventCounts }: { item: RankingItem; kind: RankingKind; maximum: number; firstPercentage?: number; eventCounts: boolean }) {
+export function RankingBar({ item, kind, maximum, firstPercentage, eventCounts, onSelect }: { item: RankingItem; kind: RankingKind; maximum: number; firstPercentage?: number; eventCounts: boolean; onSelect?: (value: string) => void }) {
   const { scheme } = useTheme();
   const styles = themedStyles[scheme];
   const label = rankingLabel(item.value, kind);
@@ -138,12 +140,16 @@ export function RankingBar({ item, kind, maximum, firstPercentage, eventCounts }
     ? item.percentage * (firstPercentage ? 100 / firstPercentage : 1)
     : item.count / maximum * 100;
   const flag = kind === 'country' ? countryFlag(item.value) : kind === 'region' || kind === 'city' ? countryFlag(item.value.split('-')[0]) : null;
-  return <View accessible accessibilityLabel={`${label}, ${item.count.toLocaleString()} ${eventCounts ? 'events' : 'sessions'}`} style={styles.rank}>
+  const Container = onSelect ? Pressable : View;
+  return <Container accessible accessibilityRole={onSelect ? 'button' : undefined} accessibilityHint={onSelect ? 'Filter analytics by this browser' : undefined}
+    onPress={onSelect ? () => onSelect(item.value) : undefined} accessibilityLabel={`${label}, ${item.count.toLocaleString()} ${eventCounts ? 'events' : 'sessions'}`} style={styles.rank}>
     <View accessible={false} style={[styles.rankFill, { width: `${Math.min(100, width)}%` }]} />
+    {kind === 'browser' || kind === 'device_type' || kind === 'operating_system' || kind === 'dimensions'
+      ? <AnalyticsItemIcon kind={kind} value={item.value} /> : null}
     {flag ? <Text accessible={false} style={styles.flag}>{flag}</Text> : null}
-    <Text selectable numberOfLines={content.some(choice => choice.value === kind) ? 2 : 1} style={styles.rankLabel}>{label}</Text>
-    <Text selectable style={styles.rankCount}>{item.count.toLocaleString()}</Text>
-  </View>;
+    <Text selectable={!onSelect} numberOfLines={content.some(choice => choice.value === kind) ? 2 : 1} style={styles.rankLabel}>{label}</Text>
+    <Text selectable={!onSelect} style={styles.rankCount}>{item.count.toLocaleString()}</Text>
+  </Container>;
 }
 
 function useWeeklySection(context: AnalyticsQueryContext, load: typeof getWeeklyTrend) {
@@ -210,9 +216,9 @@ const themedStyles = createThemedStyles(colors => ({
   selectedTabText: { color: colors.accent, fontWeight: '600' },
   columnHeading: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 4 },
   secondary: { color: colors.muted, fontSize: 12, lineHeight: 18 },
-  rank: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, overflow: 'hidden', borderRadius: 6 },
+  rank: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 10, paddingVertical: 6, overflow: 'hidden', borderRadius: 8, borderCurve: 'continuous' },
   rankFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: colors.accentSurface, borderRadius: 6 },
-  rankLabel: { flex: 1, color: colors.text, fontSize: 14 },
+  rankLabel: { flex: 1, minWidth: 0, color: colors.text, fontSize: 14, lineHeight: 20 },
   rankCount: { color: colors.text, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
   flag: { fontSize: 18 }, caption: { color: colors.muted, fontSize: 11, paddingTop: 4 },
   state: { gap: 6, paddingVertical: 12 }, stateText: { color: colors.muted, fontSize: 13, lineHeight: 20, paddingVertical: 18 },

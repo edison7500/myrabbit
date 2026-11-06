@@ -3,7 +3,7 @@ import { useTheme } from '@/stores/theme';
 import Svg, { Circle, Defs, LinearGradient, Line, Path, Stop } from 'react-native-svg';
 import { useId, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import type { AnalyticsBucket } from '@/api/rybbit/date-range';
+import { buildAnalyticsQuery, type AnalyticsBucket, type AnalyticsDateRange } from '@/api/rybbit/date-range';
 import type { TrafficPoint, OverviewMetric } from '@/api/rybbit/client';
 import { formatMetricValue, metricLabels } from '@/features/metrics/metric-format';
 import { radii, spacing, typography } from '@/constants/theme';
@@ -61,6 +61,21 @@ export function dailyChartData(points: TrafficPoint[], previous: TrafficPoint[] 
   };
 }
 
+export function calendarChartPoints(points: TrafficPoint[], range: AnalyticsDateRange, timeZone: string, now = new Date()): TrafficPoint[] | null {
+  if (range.preset !== 'this-week' && range.preset !== 'this-month') return null;
+  const query = buildAnalyticsQuery(range, timeZone, now);
+  const start = Date.parse(`${query.get('start_date')}T00:00:00Z`);
+  const end = Date.parse(`${query.get('end_date')}T00:00:00Z`);
+  const clock = chartClock(timeZone, now);
+  const byDate = new Map(points.map(point => [clock.time(point.time).slice(0, 10), point]));
+  // Advance calendar dates in UTC to keep one slot per local day across DST.
+  // Future slots reserve axis space; chartElapsedCount keeps them out of paths.
+  return Array.from({ length: Math.round((end - start) / 86_400_000) + 1 }, (_, index) => {
+    const date = new Date(start + index * 86_400_000).toISOString().slice(0, 10);
+    return { users: 0, pageviews: 0, ...byDate.get(date), time: `${date} 00:00:00` };
+  });
+}
+
 function coordinates(values: number[], maximum: number, width: number, height: number) {
   return values.map((value, index) => ({
     x: values.length === 1 ? width / 2 : (index / (values.length - 1)) * width,
@@ -96,7 +111,7 @@ export function chartTickIndexes(length: number, maximumTicks = 5) {
   return Array.from({ length: count }, (_, index) => Math.round(index * (length - 1) / (count - 1 || 1)));
 }
 
-export function TrendChart({ points, bucket, series, accessibilityLabel, height: requestedHeight = defaultChartHeight, availableHeight, comparisonValues, comparisonLabel, timeZone, fullDay = false, comparisonPoints, interactive = false }: {
+export function TrendChart({ points: sourcePoints, bucket, series, accessibilityLabel, height: requestedHeight = defaultChartHeight, availableHeight, comparisonValues, comparisonLabel, timeZone, dateRange, fullDay = false, comparisonPoints, interactive = false }: {
   points: TrafficPoint[];
   bucket: AnalyticsBucket;
   series: TrendSeries[];
@@ -106,6 +121,7 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height:
   comparisonValues?: (number | null)[];
   comparisonLabel?: string;
   timeZone?: string;
+  dateRange?: AnalyticsDateRange;
   fullDay?: boolean;
   comparisonPoints?: TrafficPoint[];
   interactive?: boolean;
@@ -119,9 +135,12 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height:
   const height = availableHeight === undefined ? requestedHeight : Math.max(80, availableHeight - detailsHeight - spacing.sm);
   const [selection, setSelection] = useState<number | null>(null);
   const gradientId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  const day = fullDay && timeZone && bucket === 'hour' ? dailyChartData(points, comparisonPoints, timeZone, new Date(), series[0]?.metric) : null;
+  const now = new Date();
+  const calendar = dateRange && timeZone && bucket === 'day' ? calendarChartPoints(sourcePoints, dateRange, timeZone, now) : null;
+  const points = calendar ?? sourcePoints;
+  const day = (fullDay || dateRange?.preset === 'today') && timeZone && bucket === 'hour' ? dailyChartData(points, comparisonPoints, timeZone, now, series[0]?.metric) : null;
   const count = day ? 25 : points.length;
-  const elapsedCount = day?.elapsedCount ?? (timeZone ? chartElapsedCount(points, bucket, timeZone) : points.length);
+  const elapsedCount = day?.elapsedCount ?? (timeZone ? chartElapsedCount(points, bucket, timeZone, now) : points.length);
   const previousValues = day?.comparisonValues ?? comparisonValues;
   const values = series.map(item => ({ ...item, color: item.color ?? (item.metric === 'pageviews' ? colors.chartSecondary : colors.accent), values: day?.values[item.metric] ?? points.map(point => point[item.metric] ?? 0) }));
   const maximum = Math.max(1, ...values.flatMap(line => line.values.slice(0, elapsedCount + 1)), ...(previousValues ?? []).filter((value): value is number => value !== null));
@@ -168,7 +187,7 @@ export function TrendChart({ points, bucket, series, accessibilityLabel, height:
       {elapsedCount > 0 && elapsedCount < count ? lines.map(line => <Path key={line.metric}
         d={path(line.points.slice(elapsedCount - 1, elapsedCount + 1))} fill="none" stroke={line.color}
         strokeWidth="2.5" strokeDasharray="4 5" strokeLinecap="butt" strokeLinejoin="round" />) : null}
-      {elapsedCount === 1 ? lines.map(line => <Circle key={line.metric} cx={line.points[0].x} cy={line.points[0].y} r="4" fill={line.color} />) : null}
+      {elapsedCount === 1 || (calendar && elapsedCount === 0) ? lines.map(line => <Circle key={line.metric} cx={line.points[0].x} cy={line.points[0].y} r="4" fill={line.color} />) : null}
       {selectedIndex !== null ? <>
         <Line x1={lines[0]?.points[selectedIndex].x} x2={lines[0]?.points[selectedIndex].x} y1={0} y2={height} stroke={colors.muted} strokeWidth={1} strokeDasharray="3 4" />
         {lines.map(line => <Circle key={line.metric} cx={line.points[selectedIndex].x} cy={line.points[selectedIndex].y} r={5} fill={line.color} stroke={colors.surface} strokeWidth={2} />)}

@@ -6,7 +6,7 @@ MyRabbit is an independent client that connects directly to the Rybbit Cloud or 
 
 - On Android and iOS, the configured connection (server URL, hosting mode and API key) is stored using Expo SecureStore. The app must read the key into request memory to authenticate.
 - Browser previews keep the connection and key in memory only. Refreshing requires reconnecting; credentials are not persisted in browser localStorage.
-- Selected-site display metadata and appearance preferences are stored separately using AsyncStorage. API keys are not part of those ordinary storage records.
+- Selected-site display metadata, appearance preferences, and the selected analytics date preset or custom dates are stored separately using AsyncStorage. API keys are not part of those ordinary storage records.
 - Analytics responses are displayed in the app and held in memory while in use. They can contain visitor/session information supplied by your server; treat screenshots and device logs accordingly.
 - On iOS, Home Screen widgets persist a normalized Today summary in the App Group shared by MyRabbit and its extension: six displayed metrics and comparisons, site ID/domain, reporting date/timezone, last successful update time, and a hashed context identifier. This cache contains no API key, server URL, raw analytics response, or visitor/session records. It remains readable offline after the device's first unlock and until refreshed or the active connection/site/timezone changes. Home Screen widgets can expose these summary metrics wherever iOS displays them.
 

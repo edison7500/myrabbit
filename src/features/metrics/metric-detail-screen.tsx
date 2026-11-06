@@ -1,3 +1,4 @@
+import { analyticsQueryIdentity } from '@/api/rybbit/analytics-context';
 import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
 import { Redirect, useFocusEffect, useNavigation, useRouter } from 'expo-router';
@@ -20,10 +21,15 @@ import { ExpandedChartContent, ExpandedMetricChart } from './expanded-metric-cha
 
 type DetailLoader = typeof loadMetricDetail;
 
-export default function MetricDetailScreen({ metric, loadDetail = loadMetricDetail }: { metric: MetricType; loadDetail?: DetailLoader }) {
+export default function MetricDetailScreen(props: { metric: MetricType; loadDetail?: DetailLoader }) {
+  const { analyticsContext } = useSession();
+  return <MetricDetail key={analyticsContext ? analyticsQueryIdentity(analyticsContext, 'metric-detail', { metric: props.metric }) : 'unavailable'} {...props} />;
+}
+
+function MetricDetail({ metric, loadDetail = loadMetricDetail }: { metric: MetricType; loadDetail?: DetailLoader }) {
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
-  const { site, dateRange, timeZone, analyticsContext, selectDateRange } = useSession();
+  const { site, dateRange, timeZone, analyticsContext, selectDateRange, selectFilters } = useSession();
   const [data, setData] = useState<MetricDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -103,7 +109,7 @@ export default function MetricDetailScreen({ metric, loadDetail = loadMetricDeta
   <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} hidden={chartExpanded || landscape} />
   {showLandscapeChart && chart ? <ExpandedChartContent title={definition.title} chart={chart} onClose={closeChart} /> :
   <Screen navigationHeader title={definition.title} description={
-    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} disabled={loading || refreshing} onRangeChange={changeRange} />
+    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} filters={analyticsContext?.filters} onFiltersChange={selectFilters} disabled={loading || refreshing} onRangeChange={changeRange} />
   } refreshing={refreshing} onRefresh={refresh}>
     {loading ? <LoadingState variant="summary" message={`Loading ${definition.title.toLowerCase()}…`} /> : null}
     {!loading && error ? <ErrorState message={error} onRetry={refresh} /> : null}

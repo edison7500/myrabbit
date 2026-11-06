@@ -10,6 +10,8 @@ import { SectionHeading, Surface } from '@/components/analytics-ui';
 import { Screen, type ScreenSection } from '@/components/screen';
 import { LoadingState, ErrorState, EmptyState } from '@/components/content-state';
 
+import { AnalyticsFilterBar } from '@/components/analytics-filter-bar';
+import { toggleAnalyticsFilter } from './analytics-filters';
 import { useSession } from '@/stores/session';
 import { analyticsBucket, dateRangeLabel, type AnalyticsDateRange } from '@/api/rybbit/date-range';
 import { analyticsQueryIdentity, type AnalyticsQueryContext } from '@/api/rybbit/analytics-context';
@@ -45,7 +47,7 @@ export function Explore({ loadOverview = getOverview, loadTraffic = getTraffic, 
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const router = useRouter();
-  const { dateRange: range, analyticsContext, selectDateRange } = useSession();
+  const { dateRange: range, analyticsContext, selectDateRange, selectFilters } = useSession();
   const [overview, setOverview] = useState<Overview | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -187,7 +189,7 @@ export function Explore({ loadOverview = getOverview, loadTraffic = getTraffic, 
         {!trafficLoading && !trafficError && traffic?.length === 0 ? <View style={styles.chartState}><Text style={styles.chartStateTitle}>No traffic yet</Text><Text style={styles.chartStateText}>No trend data was recorded for this range.</Text></View> : null}
         {!trafficError && traffic?.length ? <Pressable accessibilityRole="button" accessibilityLabel="Open full Traffic chart"
           onPress={() => router.push('/traffic')} style={({ pressed }) => pressed && styles.cardPressed}>
-          <TrendChart points={traffic} bucket={analyticsBucket(range)} series={trafficSeries}
+          <TrendChart points={traffic} bucket={analyticsBucket(range)} dateRange={range} timeZone={analyticsContext?.timeZone} series={trafficSeries}
             accessibilityLabel={`Traffic trend with ${traffic.length} time buckets`} />
         </Pressable> : null}
       </Surface>
@@ -197,15 +199,16 @@ export function Explore({ loadOverview = getOverview, loadTraffic = getTraffic, 
     { key: 'traffic', header: trafficHeader, content: trafficContent },
     { key: 'referrers', header: <ReferrersHeading onOpen={() => router.push('/referrers')} />,
       content: <ReferrersPreview page={referrers} loading={referrersLoading} error={referrersError}
-        onRetry={retryReferrers} onOpen={() => router.push('/referrers')} showHeader={false} /> },
+        onRetry={retryReferrers} onOpen={() => router.push('/referrers')} showHeader={false} onSelect={value => selectFilters(toggleAnalyticsFilter(analyticsContext?.filters ?? [], 'referrer', value))} /> },
     ...chartSections,
   ]}>
     {process.env.EXPO_OS === 'ios' ? <ExploreNavigation disabled={loading || refreshing} onRangeChange={changeRange} /> : null}
+    {analyticsContext?.filters.length ? <AnalyticsFilterBar filters={analyticsContext.filters} onChange={selectFilters} /> : null}
     {loading ? <LoadingState variant="summary" message={`Loading ${rangeName.toLowerCase()} analytics…`} /> : null}
     {error ? <ErrorState message={error} onRetry={refreshing ? undefined : refresh} /> : null}
     {!loading && !error && !overview ? <EmptyState message={`No analytics were recorded for ${rangeName.toLowerCase()}.`} /> : null}
   </Screen>;
-  return <>{process.env.EXPO_OS !== 'ios' ? <ExploreNavigation disabled={loading || refreshing} onRangeChange={changeRange} /> : null}{analyticsContext ? <ExploreCharts key={analyticsQueryIdentity(analyticsContext, 'charts')} context={analyticsContext} ref={charts}>
+  return <>{process.env.EXPO_OS !== 'ios' ? <ExploreNavigation disabled={loading || refreshing} onRangeChange={changeRange} /> : null}{analyticsContext ? <ExploreCharts key={analyticsQueryIdentity(analyticsContext, 'charts')} context={analyticsContext} ref={charts} onBrowserSelect={value => selectFilters(toggleAnalyticsFilter(analyticsContext.filters, 'browser', value))}>
     {renderScreen}
   </ExploreCharts> : renderScreen([])}</>;
 }

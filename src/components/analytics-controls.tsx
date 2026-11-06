@@ -2,7 +2,9 @@ import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
 import { Link } from 'expo-router';
 import { ChevronDown, Globe } from 'lucide-react-native';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import type { AnalyticsFilter } from '@/api/rybbit/analytics-context';
+import { AnalyticsFilterBar } from './analytics-filter-bar';
 import type { AnalyticsDateRange } from '@/api/rybbit/date-range';
 
 import { DateRangeSelector } from './date-range-selector';
@@ -13,6 +15,8 @@ type Props = {
   timeZone: string;
   disabled?: boolean;
   onRangeChange: (range: AnalyticsDateRange) => void;
+  filters?: readonly AnalyticsFilter[];
+  onFiltersChange?: (filters: readonly AnalyticsFilter[]) => void;
 };
 
 export function SiteSwitcher({ siteLabel, navbar = false, width }: { siteLabel: string; navbar?: boolean; width?: number }) {
@@ -26,9 +30,11 @@ export function SiteSwitcher({ siteLabel, navbar = false, width }: { siteLabel: 
   </Pressable></Link>;
 }
 
-export function AnalyticsControls({ siteLabel, range, timeZone, disabled = false, onRangeChange }: Props) {
+export function AnalyticsControls({ siteLabel, range, timeZone, disabled = false, onRangeChange, filters, onFiltersChange }: Props) {
   const siteControl = <SiteSwitcher siteLabel={siteLabel} />;
-  return <DateRangeSelector value={range} timeZone={timeZone} disabled={disabled} leadingControl={siteControl} onChange={onRangeChange} />;
+  return <View style={{ gap: 12 }}><DateRangeSelector value={range} timeZone={timeZone} disabled={disabled} leadingControl={siteControl} onChange={onRangeChange} />
+    <AnalyticsFilterBar filters={filters} onChange={onFiltersChange} />
+  </View>;
 }
 
 const themedStyles = createThemedStyles(colors => ({

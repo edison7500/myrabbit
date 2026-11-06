@@ -36,6 +36,7 @@ test('web connection removal clears memory without writing browser storage or ca
 async function session({ selectionError = false, credentialError = false } = {}) {
   let observed; const events = [];
   const load = createLoader({
+    '@/storage/date-range': { loadDateRange: async () => ({ preset: 'today' }), saveDateRange: async () => {} },
     '@/api/rybbit/client': { getSites: async () => [site] },
     '@/storage/connection': {
       loadConnection: async () => config,

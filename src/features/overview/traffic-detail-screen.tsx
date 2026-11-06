@@ -1,3 +1,4 @@
+import { analyticsQueryIdentity } from '@/api/rybbit/analytics-context';
 import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
 import { Redirect } from 'expo-router';
@@ -16,10 +17,15 @@ import { TrendChart, trafficSeries } from './traffic-chart';
 
 type TrafficLoader = (context: AnalyticsQueryContext, signal: AbortSignal) => Promise<TrafficPoint[]>;
 
-export default function TrafficDetailScreen({ loadTraffic = getTraffic }: { loadTraffic?: TrafficLoader }) {
+export default function TrafficDetailScreen(props: { loadTraffic?: TrafficLoader }) {
+  const { analyticsContext } = useSession();
+  return <TrafficDetail key={analyticsContext ? analyticsQueryIdentity(analyticsContext, 'traffic') : 'unavailable'} {...props} />;
+}
+
+function TrafficDetail({ loadTraffic = getTraffic }: { loadTraffic?: TrafficLoader }) {
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
-  const { site, dateRange, timeZone, analyticsContext, selectDateRange } = useSession();
+  const { site, dateRange, timeZone, analyticsContext, selectDateRange, selectFilters } = useSession();
   const [points, setPoints] = useState<TrafficPoint[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -67,7 +73,7 @@ export default function TrafficDetailScreen({ loadTraffic = getTraffic }: { load
 
   if (!site || !analyticsContext) return <Redirect href={site ? '/(tabs)/overview' : '/sites'} />;
   return <Screen navigationHeader title="Traffic" description={
-    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone}
+    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} filters={analyticsContext?.filters} onFiltersChange={selectFilters}
       disabled={loading || refreshing} onRangeChange={changeRange} />
   } refreshing={refreshing} onRefresh={refresh}>
     <View style={styles.legend}>
@@ -78,7 +84,7 @@ export default function TrafficDetailScreen({ loadTraffic = getTraffic }: { load
     {!loading && error ? <ErrorState message={error} onRetry={refresh} /> : null}
     {!loading && !error && points?.length === 0 ? <EmptyState message="No traffic was recorded for this range." /> : null}
     {!loading && !error && points?.length ? <View style={styles.chartCard}>
-      <TrendChart interactive points={points} bucket={analyticsBucket(dateRange)} series={trafficSeries} height={240}
+      <TrendChart interactive points={points} bucket={analyticsBucket(dateRange)} dateRange={dateRange} timeZone={timeZone} series={trafficSeries} height={240}
         accessibilityLabel={`Traffic trend with ${points.length} time buckets`} />
     </View> : null}
   </Screen>;

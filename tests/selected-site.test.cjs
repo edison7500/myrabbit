@@ -55,6 +55,7 @@ test('SessionProvider restores the selected site before marking startup ready', 
   let receivedServer = '';
   let observed;
   const sessionLoad = createLoader({
+    '@/storage/date-range': { loadDateRange: async () => ({ preset: 'today' }), saveDateRange: async () => {} },
     '@/api/rybbit/client': { getSites: async () => [restored] },
     '@/storage/connection': { loadConnection: async () => ({ mode: 'self-host', baseUrl: 'https://analytics.test', apiKey: 'secret' }) },
     '@/storage/selected-site': {
