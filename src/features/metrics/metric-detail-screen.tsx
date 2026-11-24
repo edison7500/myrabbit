@@ -1,32 +1,36 @@
-import { analyticsQueryIdentity } from '@/api/rybbit/analytics-context';
-import { createThemedStyles } from '@/constants/themed-styles';
-import { useTheme } from '@/stores/theme';
 import { Redirect, useFocusEffect, useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
-import { Maximize2 } from 'lucide-react-native';
+import { useHeaderHeight } from 'expo-router/react-navigation';
 import { StatusBar } from 'expo-status-bar';
-import { analyticsBucket, type AnalyticsDateRange } from '@/api/rybbit/date-range';
+import { Maximize2 } from 'lucide-react-native';
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
+import { Pressable, Text, useWindowDimensions, View, type LayoutChangeEvent, type ScrollView } from 'react-native';
+import { analyticsQueryIdentity } from '@/api/rybbit/analytics-context';
+import { analyticsBucket } from '@/api/rybbit/date-range';
 import { AnalyticsControls } from '@/components/analytics-controls';
-import { EmptyState, ErrorState, LoadingState } from '@/components/content-state';
+import { ErrorState, LoadingState } from '@/components/content-state';
 import { Screen } from '@/components/screen';
-import { radii } from '@/constants/theme';
+import { radii, spacing } from '@/constants/theme';
+import { createThemedStyles } from '@/constants/themed-styles';
 import { siteHeading } from '@/features/overview/overview-state';
-import { TrendChart, type TrendSeries } from '@/features/overview/traffic-chart';
+import { TrendChart } from '@/features/overview/traffic-chart';
 import { useSession } from '@/stores/session';
-import { alignYesterdayByHour, loadMetricDetail, type MetricDetailData } from './metric-detail-data';
-import { metricDefinitions, type MetricType } from './metric-types';
-import { formatMetricValue } from './metric-format';
+import { useTheme } from '@/stores/theme';
 import { ExpandedChartContent, ExpandedMetricChart } from './expanded-metric-chart';
+import { loadMetricDetail, type MetricDetailData } from './metric-detail-data';
+import { formatMetricValue } from './metric-format';
+import { metricDefinitions, metricOrder, type MetricType } from './metric-types';
 
-type DetailLoader = typeof loadMetricDetail;
+type DetailProps = { anchor: MetricType; loadDetail?: typeof loadMetricDetail };
+type ChartProps = ComponentProps<typeof TrendChart>;
+const title = 'Metric Trends';
 
-export default function MetricDetailScreen(props: { metric: MetricType; loadDetail?: DetailLoader }) {
+export default function MetricDetailScreen(props: DetailProps) {
   const { analyticsContext } = useSession();
-  return <MetricDetail key={analyticsContext ? analyticsQueryIdentity(analyticsContext, 'metric-detail', { metric: props.metric }) : 'unavailable'} {...props} />;
+  if (!analyticsContext) return <Redirect href="/sites" />;
+  return <MetricDetail key={analyticsQueryIdentity(analyticsContext, 'metric-detail')} {...props} />;
 }
 
-function MetricDetail({ metric, loadDetail = loadMetricDetail }: { metric: MetricType; loadDetail?: DetailLoader }) {
+function MetricDetail({ anchor, loadDetail = loadMetricDetail }: DetailProps) {
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const { site, dateRange, timeZone, analyticsContext, selectDateRange, selectFilters } = useSession();
@@ -34,32 +38,80 @@ function MetricDetail({ metric, loadDetail = loadMetricDetail }: { metric: Metri
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [chartExpanded, setChartExpanded] = useState(false);
+  const [expandedMetric, setExpandedMetric] = useState<MetricType | null>(null);
   const router = useRouter();
   const navigation = useNavigation();
+  const headerHeight = useHeaderHeight();
   const { width, height } = useWindowDimensions();
   const landscape = process.env.EXPO_OS !== 'web' && width > height;
   const refreshRequest = useRef<AbortController | null>(null);
-  const definition = metricDefinitions[metric];
-  const series: TrendSeries[] = [{ metric: definition.apiMetric, fill: true }];
-  const hasChart = !!data && (data.points.length > 0 || dateRange.preset === 'today');
-  const showLandscapeChart = landscape && !loading && !error && hasChart;
+  const scrollView = useRef<ScrollView | null>(null);
+  const anchorFrame = useRef<number | null>(null);
+  const didScrollToAnchor = useRef(false);
+  const fullDay = dateRange.preset === 'today';
+  const bucket = analyticsBucket(dateRange);
+
+  const charts = data ? metricOrder.map(metric => {
+    const { title: label, apiMetric } = metricDefinitions[metric];
+    const total = data.overview[apiMetric];
+    const missingPoints = data.points.some(point => point[apiMetric] === undefined);
+    const yesterday = data.yesterday?.every(point => point[apiMetric] !== undefined) ? data.yesterday : undefined;
+    const comparisonError = data.comparisonError ?? (data.yesterday && !yesterday ? 'Yesterday comparison unavailable.' : null);
+    const empty = data.points.length === 0;
+    const canChart = !missingPoints && (!empty || (fullDay && total !== undefined));
+    const chart: ChartProps | null = canChart ? {
+      interactive: true, points: data.points, bucket, timeZone, fullDay,
+      series: [{ metric: apiMetric, label, fill: true }],
+      comparisonPoints: yesterday,
+      comparisonLabel: yesterday ? 'Yesterday' : undefined,
+      accessibilityLabel: `${label} trend with ${data.points.length} time buckets`,
+    } : null;
+    return { metric, label, apiMetric, total, missingPoints, comparisonError, chart };
+  }) : [];
+  const focusedChart = charts.find(chart => chart.metric === (expandedMetric ?? anchor));
+  const fullScreenChart = focusedChart?.chart && {
+    ...focusedChart.chart,
+    accessibilityLabel: `Expanded ${focusedChart.chart.accessibilityLabel}`,
+  };
+  const showLandscapeChart = landscape && !loading && !error && !!fullScreenChart;
 
   useFocusEffect(useCallback(() => {
-    // Loading, empty and retry states retain the native back button in landscape.
+    // Keep native back navigation visible for loading, empty and retry states.
     navigation.setOptions({ headerShown: !showLandscapeChart });
     return () => navigation.setOptions({ headerShown: true });
   }, [navigation, showLandscapeChart]));
 
   useEffect(() => {
-    if (!analyticsContext || !definition.detailAvailable) return;
+    if (!analyticsContext) return;
     const controller = new AbortController();
-    loadDetail(metric, analyticsContext, controller.signal)
+    loadDetail(analyticsContext, controller.signal)
       .then(result => { if (!controller.signal.aborted) setData(result); })
-      .catch(issue => { if (!controller.signal.aborted) setError(issue instanceof Error ? issue.message : 'Could not load metric details.'); })
+      .catch(issue => { if (!controller.signal.aborted) setError(issue instanceof Error ? issue.message : 'Could not load metric trends.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); refreshRequest.current?.abort(); };
-  }, [analyticsContext, definition.detailAvailable, loadDetail, metric]);
+  }, [analyticsContext, loadDetail]);
+
+  const setScrollView = useCallback((view: ScrollView | null) => {
+    if (anchorFrame.current !== null) cancelAnimationFrame(anchorFrame.current);
+    anchorFrame.current = null;
+    didScrollToAnchor.current = false;
+    scrollView.current = view;
+  }, []);
+
+  function scrollToAnchor({ nativeEvent: { layout } }: LayoutChangeEvent) {
+    if (didScrollToAnchor.current) return;
+    if (anchorFrame.current !== null) cancelAnimationFrame(anchorFrame.current);
+    // Wait for the scroll view to receive its content size. iOS lays out
+    // content beneath the transparent navigation bar and applies a native inset.
+    const topInset = process.env.EXPO_OS === 'ios' ? headerHeight : 0;
+    const y = Math.max(0, layout.y - topInset - spacing.md);
+    anchorFrame.current = requestAnimationFrame(() => {
+      anchorFrame.current = null;
+      if (!scrollView.current) return;
+      scrollView.current.scrollTo({ y, animated: false });
+      didScrollToAnchor.current = true;
+    });
+  }
 
   async function refresh() {
     if (!analyticsContext || loading || refreshRequest.current) return;
@@ -68,78 +120,70 @@ function MetricDetail({ metric, loadDetail = loadMetricDetail }: { metric: Metri
     setRefreshing(true);
     setError('');
     try {
-      const result = await loadDetail(metric, analyticsContext, controller.signal);
+      const result = await loadDetail(analyticsContext, controller.signal);
       if (!controller.signal.aborted) setData(result);
     } catch (issue) {
-      if (!controller.signal.aborted) setError(issue instanceof Error ? issue.message : 'Could not refresh metric details.');
+      if (!controller.signal.aborted) setError(issue instanceof Error ? issue.message : 'Could not refresh metric trends.');
     } finally {
-      if (!controller.signal.aborted) {
+      if (refreshRequest.current === controller) {
         refreshRequest.current = null;
-        setRefreshing(false);
+        if (!controller.signal.aborted) setRefreshing(false);
       }
     }
   }
 
-  function changeRange(range: AnalyticsDateRange) {
-    refreshRequest.current?.abort();
-    refreshRequest.current = null;
-    setData(null);
-    setError('');
-    setLoading(true);
-    setRefreshing(false);
-    selectDateRange(range);
-  }
-
   function closeChart() {
-    setChartExpanded(false);
-    // Landscape is already the full chart page; one close returns to the
-    // previous portrait screen rather than revealing an identical chart.
+    setExpandedMetric(null);
+    // In landscape the route already displays a fullscreen chart.
     if (landscape) router.back();
   }
 
-  if (!site || !definition.detailAvailable) return <Redirect href={site ? '/(tabs)/overview' : '/sites'} />;
-  const comparisonValues = data?.yesterday && data.points.length ? alignYesterdayByHour(data.points, data.yesterday, definition.apiMetric) : undefined;
-  const chart = data ? {
-    interactive: true, points: data.points, bucket: analyticsBucket(dateRange), timeZone, series,
-    fullDay: dateRange.preset === 'today', comparisonPoints: data.yesterday ?? undefined,
-    comparisonValues, comparisonLabel: data.yesterday ? 'Yesterday' : undefined,
-    accessibilityLabel: `Expanded ${definition.title.toLowerCase()} trend with ${data.points.length} time buckets`,
-  } : null;
   return <>
-  <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} hidden={chartExpanded || landscape} />
-  {showLandscapeChart && chart ? <ExpandedChartContent title={definition.title} chart={chart} onClose={closeChart} /> :
-  <Screen navigationHeader title={definition.title} description={
-    <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} filters={analyticsContext?.filters} onFiltersChange={selectFilters} disabled={loading || refreshing} onRangeChange={changeRange} />
-  } refreshing={refreshing} onRefresh={refresh}>
-    {loading ? <LoadingState variant="summary" message={`Loading ${definition.title.toLowerCase()}…`} /> : null}
-    {!loading && error ? <ErrorState message={error} onRetry={refresh} /> : null}
-    {!loading && !error && data?.points.length === 0 ? <EmptyState message={`No ${definition.title.toLowerCase()} were recorded for this range.`} /> : null}
-    {!loading && !error && data && (data.points.length > 0 || dateRange.preset === 'today') ? <>
-      <View style={styles.summary}><Text selectable style={styles.total}>{formatMetricValue(data.total, definition.apiMetric)}</Text><Text style={styles.metric}>{definition.title}</Text></View>
-      <View style={styles.chartCard}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Expand ${definition.title} chart`} onPress={() => setChartExpanded(true)} style={styles.expandButton}>
-          <Maximize2 size={18} color={colors.muted} strokeWidth={2} accessible={false} />
-        </Pressable>
-        <TrendChart interactive points={data.points} bucket={analyticsBucket(dateRange)} timeZone={timeZone} series={series} height={160}
-          fullDay={dateRange.preset === 'today'} comparisonPoints={data.yesterday ?? undefined}
-          comparisonValues={comparisonValues}
-          comparisonLabel={data.yesterday ? 'Yesterday' : undefined}
-          accessibilityLabel={`${definition.title} trend with ${data.points.length} time buckets`} />
-      </View>
-      {data.comparisonError ? <Text style={styles.comparisonError}>{data.comparisonError}</Text> : null}
-    </> : null}
-  </Screen>}
-  {chartExpanded && chart && hasChart ? <ExpandedMetricChart
-    title={definition.title} onClose={closeChart}
-    chart={chart} /> : null}
+    <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} hidden={!!expandedMetric || showLandscapeChart} />
+    {showLandscapeChart && fullScreenChart ? (
+      <ExpandedChartContent title={focusedChart.label} chart={fullScreenChart} onClose={closeChart} />
+    ) : (
+      <Screen navigationHeader title={title} scrollRef={setScrollView} description={
+        <AnalyticsControls siteLabel={siteHeading(site)} range={dateRange} timeZone={timeZone} filters={analyticsContext?.filters}
+          onFiltersChange={selectFilters} disabled={loading || refreshing} onRangeChange={selectDateRange} />
+      } refreshing={refreshing} onRefresh={refresh}>
+        {loading ? <LoadingState variant="summary" message="Loading metric trends…" /> : null}
+        {error ? <ErrorState message={error} onRetry={refresh} /> : null}
+        {charts.map(({ metric, label, apiMetric, total, missingPoints, comparisonError, chart }) => (
+          <View key={metric} nativeID={`metric-${metric}`} style={styles.chartCard}
+            onLayout={metric === anchor && metric !== metricOrder[0] ? scrollToAnchor : undefined}>
+            <View style={styles.chartHeader}>
+              <View style={styles.summary}>
+                <Text accessibilityRole="header" style={styles.metric}>{label}</Text>
+                {total !== undefined ? <Text selectable style={styles.total}>{formatMetricValue(total, apiMetric)}</Text> : null}
+              </View>
+              {chart ? <Pressable accessibilityRole="button" accessibilityLabel={`Expand ${label} chart`}
+                onPress={() => setExpandedMetric(metric)} style={({ pressed }) => [styles.expandButton, pressed && { opacity: 0.6 }]}>
+                <Maximize2 size={18} color={colors.muted} strokeWidth={2} accessible={false} />
+              </Pressable> : null}
+            </View>
+            {chart ? <TrendChart {...chart} height={160} /> : (
+              <Text style={styles.message}>{missingPoints
+                ? 'This trend is unavailable from your Rybbit server.'
+                : 'No data was recorded for this range.'}</Text>
+            )}
+            {chart && comparisonError ? <Text style={styles.message}>{comparisonError}</Text> : null}
+          </View>
+        ))}
+      </Screen>
+    )}
+    {expandedMetric && fullScreenChart ? (
+      <ExpandedMetricChart title={focusedChart.label} onClose={closeChart} chart={fullScreenChart} />
+    ) : null}
   </>;
 }
 
 const themedStyles = createThemedStyles(colors => ({
-  summary: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: 8 },
-  total: { color: colors.text, fontSize: 40, fontWeight: '700', letterSpacing: -1.2, fontVariant: ['tabular-nums'] },
-  metric: { color: colors.muted, fontSize: 17, fontWeight: '600' },
-  chartCard: { justifyContent: 'center', backgroundColor: colors.surface, borderRadius: radii.card, borderCurve: 'continuous', padding: 14 },
-  expandButton: { alignSelf: 'flex-end', minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  comparisonError: { color: colors.muted, fontSize: 13 },
+  chartCard: { backgroundColor: colors.surface, borderRadius: radii.card, borderCurve: 'continuous', padding: spacing.lg, gap: spacing.md },
+  chartHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
+  summary: { flex: 1, gap: spacing.xs },
+  total: { color: colors.text, fontSize: 32, fontWeight: '700', letterSpacing: -0.7, fontVariant: ['tabular-nums'] },
+  metric: { color: colors.text, fontSize: 17, fontWeight: '600' },
+  expandButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  message: { color: colors.muted, fontSize: 13 },
 }));

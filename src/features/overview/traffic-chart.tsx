@@ -11,7 +11,7 @@ import { radii, spacing, typography } from '@/constants/theme';
 const initialChartWidth = 320;
 const defaultChartHeight = 132;
 type TrendMetric = OverviewMetric;
-export type TrendSeries = { metric: TrendMetric; color?: string; fill?: boolean };
+export type TrendSeries = { metric: TrendMetric; label?: string; color?: string; fill?: boolean };
 
 function chartClock(timeZone: string, now: Date) {
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -155,7 +155,7 @@ export function TrendChart({ points: sourcePoints, bucket, series, accessibility
   const selectedTime = selectedIndex === null ? '' : day
     ? `${String(selectedIndex - 1).padStart(2, '0')}:00–${String(selectedIndex).padStart(2, '0')}:00`
     : points[selectedIndex].time.replace('T', ' ').replace(/\.\d+Z$/, 'Z');
-  const selectedSummary = selectedIndex === null ? '' : `${selectedTime}${selectedIndex === elapsedCount ? ' · In progress' : ''}. ${lines.map(line => `${metricLabels[line.metric]}: ${formatMetricValue(line.values[selectedIndex], line.metric)}`).join('. ')}`;
+  const selectedSummary = selectedIndex === null ? '' : `${selectedTime}${selectedIndex === elapsedCount ? ' · In progress' : ''}. ${lines.map(line => `${line.label ?? metricLabels[line.metric]}: ${formatMetricValue(line.values[selectedIndex], line.metric)}`).join('. ')}`;
   function moveSelection(direction: number) {
     setSelection(Math.max(firstSelectable, Math.min(lastSelectable, (selectedIndex ?? firstSelectable) + direction)));
   }

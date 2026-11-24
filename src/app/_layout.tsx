@@ -78,7 +78,7 @@ function RootNavigator() {
           headerShadowVisible: false,
         }} />
         <Stack.Screen name="metrics/[metric]" options={{
-          title: 'Visitors',
+          title: 'Metric Trends',
           headerShown: true,
           orientation: 'all',
           headerBackButtonDisplayMode: 'minimal',

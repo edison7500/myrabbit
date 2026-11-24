@@ -27,6 +27,7 @@ const Link = ({ children, ...props }) => React.createElement('Link', props, chil
 const baseMocks = { 'react-native': native, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider', useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }, 'lucide-react-native': icons,
   'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, useReducedMotion: () => false },
   'expo-status-bar': { StatusBar: 'StatusBar' },
+  'expo-router/react-navigation': { useHeaderHeight: () => 0 },
   '@/api/rybbit/client': {
     getOverview: () => Promise.reject(new Error('Inject an overview loader in component tests.')),
     getPreviousOverview: async () => null,
@@ -165,12 +166,12 @@ test('Dashboard renders six cards, retains them while refreshing, and offers ret
   for (const label of ['Unique Users', 'Sessions', 'Pageviews', 'Pages per Session', 'Bounce Rate', 'Session Duration']) assert.ok(text(tree.toJSON()).includes(label));
   assert.equal((text(tree.toJSON()).match(/example.test/g) ?? []).length, 1);
   assert.equal(tree.root.findAllByType('Globe').length, 1);
-  const visitorsCard = tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === 'Open Visitors details');
+  const visitorsCard = tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === 'Open Unique Users chart');
   assert.equal(visitorsCard.props.accessibilityRole, 'button');
   assert.equal(visitorsCard.props.style({ pressed: false })[0].flexBasis, '45%');
   await act(async () => { visitorsCard.props.onPress(); });
   for (const [label, icon] of [['Sessions', 'Repeat2'], ['Pageviews', 'Eye'], ['Pages per Session', 'Layers'], ['Bounce Rate', 'CornerUpLeft'], ['Session Duration', 'Timer']]) {
-    const card = tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === `Open ${label} details`);
+    const card = tree.root.findAllByType('Pressable').find(node => node.props.accessibilityLabel === `Open ${label} chart`);
     assert.ok(card.findByType(icon));
     await act(async () => { card.props.onPress(); });
   }
@@ -249,17 +250,15 @@ test('traffic chart redraws to its available width and shows intermediate time l
   await act(async () => tree.unmount());
 });
 
-test('Visitors route leaves app orientation unchanged', async () => {
+test('metric route passes the chart anchor and leaves app orientation unchanged', async () => {
   const load = createLoader({
     'expo-router': { Redirect: 'Redirect', useLocalSearchParams: () => ({ metric: 'visitors' }) },
-    'expo-router/stack': { Stack: { Screen: 'StackScreen' } },
     '@/features/metrics/metric-detail-screen': 'MetricDetailScreen',
   });
   const Route = load('src/app/metrics/[metric].tsx').default;
   let tree;
   await act(async () => { tree = create(React.createElement(Route)); });
-  assert.equal(tree.root.findByType('MetricDetailScreen').props.metric, 'visitors');
-  assert.equal(tree.root.findByType('StackScreen').props.options.title, 'Visitors');
+  assert.equal(tree.root.findByType('MetricDetailScreen').props.anchor, 'visitors');
   assert.equal(require('../app.json').expo.orientation, 'portrait');
   await act(async () => tree.unmount());
 });
@@ -314,13 +313,13 @@ test('metric details follow rotation, preserve data, retain failure navigation a
   });
   const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
   let tree;
-  const render = () => React.createElement(Detail, { metric: 'visitors', loadDetail: loader });
+  const render = () => React.createElement(Detail, { anchor: 'visitors', loadDetail: loader });
   await act(async () => { tree = create(render()); });
   assert.equal(options.headerShown, true);
   dimensions = { width: 844, height: 390 };
   await act(async () => tree.update(render()));
   assert.equal(options.headerShown, true, 'loading must keep the native back button');
-  await act(async () => pending.resolve({ total: 5, points: [{ time: '2026-01-01 00:00:00', users: 5 }] }));
+  await act(async () => pending.resolve({ overview: { users: 5 }, points: [{ time: '2026-01-01 00:00:00', users: 5 }] }));
   assert.equal(options.headerShown, false);
   assert.ok(tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' }));
   await act(async () => tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' }).props.onPress());
@@ -328,9 +327,9 @@ test('metric details follow rotation, preserve data, retain failure navigation a
   dimensions = { width: 390, height: 844 };
   await act(async () => tree.update(render()));
   assert.equal(options.headerShown, true);
-  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }));
+  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Expand Unique Users chart' }));
   assert.equal(requests, 1, 'rotation must not repeat the analytics request');
-  await act(async () => tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }).props.onPress());
+  await act(async () => tree.root.findByProps({ accessibilityLabel: 'Expand Unique Users chart' }).props.onPress());
   assert.equal(tree.root.findAllByType('Modal').length, 1);
   dimensions = { width: 844, height: 390 };
   await act(async () => tree.update(render()));
@@ -349,7 +348,7 @@ test('metric details follow rotation, preserve data, retain failure navigation a
     '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }),
   });
   const FailedDetail = failureLoad('src/features/metrics/metric-detail-screen.tsx').default;
-  await act(async () => { tree = create(React.createElement(FailedDetail, { metric: 'visitors', loadDetail: async () => { throw new Error('Offline'); } })); });
+  await act(async () => { tree = create(React.createElement(FailedDetail, { anchor: 'visitors', loadDetail: async () => { throw new Error('Offline'); } })); });
   assert.equal(options.headerShown, true);
   assert.match(text(tree.toJSON()), /Offline/);
   assert.equal(tree.root.findAllByProps({ accessibilityLabel: 'Close expanded chart' }).length, 0);
@@ -466,12 +465,12 @@ test('Visitors shows the full Today axis with zero current buckets in both portr
   });
   const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
   let tree; await act(async () => { tree = create(React.createElement(Detail, {
-    metric: 'visitors', loadDetail: async () => ({ total: 0, points: [], yesterday: null, comparisonError: null }),
+    anchor: 'visitors', loadDetail: async () => ({ overview: { users: 0 }, points: [], yesterday: null, comparisonError: null }),
   })); });
   t.after(async () => { await act(async () => tree.unmount()); });
   assert.equal(tree.root.findAllByType('Svg').length, 1);
   assert.match(text(tree.toJSON()), /00:00.*24:00/);
-  await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }).props.onPress(); });
+  await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Expand Unique Users chart' }).props.onPress(); });
   assert.equal(tree.root.findAllByType('Svg').length, 2);
   assert.equal(tree.root.findAllByType('Text').filter(node => node.props.children === '24:00').length, 2);
 });
@@ -574,30 +573,30 @@ test('Visitors detail inherits the shared site and range, refreshes, and updates
     '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }) });
   const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
   let pending = deferred(); const requests = [];
-  const loader = (metric, queryContext) => { requests.push({ metric, ...queryContext }); return pending.promise; };
+  const loader = queryContext => { requests.push(queryContext); return pending.promise; };
   const points = [{ time: '2026-01-01 00:00:00', users: 5, pageviews: 8 }, { time: '2026-01-02 00:00:00', users: 7, pageviews: 10 }];
-  let tree; await act(async () => { tree = create(React.createElement(Detail, { metric: 'visitors', loadDetail: loader })); });
-  assert.equal(tree.root.findByProps({ accessibilityLabel: 'Loading visitors…' }).props.accessibilityRole, 'progressbar');
-  await act(async () => { pending.resolve({ total: 513, points }); });
-  assert.match(text(tree.toJSON()), /513Visitors/);
-  assert.ok(tree.root.findAllByProps({ accessibilityLabel: 'Visitors trend with 2 time buckets' }).some(node => node.props.accessibilityRole === 'adjustable'));
-  await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Expand Visitors chart' }).props.onPress(); });
+  let tree; await act(async () => { tree = create(React.createElement(Detail, { anchor: 'visitors', loadDetail: loader })); });
+  assert.equal(tree.root.findByProps({ accessibilityLabel: 'Loading metric trends…' }).props.accessibilityRole, 'progressbar');
+  await act(async () => { pending.resolve({ overview: { users: 513 }, points }); });
+  assert.match(text(tree.toJSON()), /Unique Users513/);
+  assert.ok(tree.root.findAllByProps({ accessibilityLabel: 'Unique Users trend with 2 time buckets' }).some(node => node.props.accessibilityRole === 'adjustable'));
+  await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Expand Unique Users chart' }).props.onPress(); });
   assert.ok(tree.root.findByType('Modal'));
   assert.equal(tree.root.findByType('Modal').props.animationType, 'fade');
-  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Expanded visitors trend with 2 time buckets' }));
+  assert.ok(tree.root.findByProps({ accessibilityLabel: 'Expanded Unique Users trend with 2 time buckets' }));
   await act(async () => { tree.root.findByProps({ accessibilityLabel: 'Close expanded chart' }).props.onPress(); });
   assert.equal(tree.root.findAllByType('Modal').length, 0);
   assert.deepEqual(requests[0].dateRange, { preset: 'today' }); assert.equal(requests[0].siteId, 'site-1');
   pending = deferred();
   await act(async () => { datePicker(tree).props.onValueChange('last-7-days'); });
   assert.deepEqual(requests.at(-1).dateRange, { preset: 'last-7-days' });
-  await act(async () => { pending.resolve({ total: 900, points }); });
+  await act(async () => { pending.resolve({ overview: { users: 900 }, points }); });
   pending = deferred();
   const refreshControl = tree.root.findByType('ScrollView').props.refreshControl;
   await act(async () => { refreshControl.props.onRefresh(); });
   assert.deepEqual(requests.at(-1).dateRange, { preset: 'last-7-days' });
-  await act(async () => { pending.resolve({ total: 901, points }); });
-  assert.match(text(tree.toJSON()), /901Visitors/);
+  await act(async () => { pending.resolve({ overview: { users: 901 }, points }); });
+  assert.match(text(tree.toJSON()), /Unique Users901/);
   await act(async () => tree.unmount());
 });
 
@@ -606,10 +605,10 @@ test('Visitors detail handles empty and error results', async () => {
     const load = createLoader({ ...baseMocks, 'expo-router': { ...baseMocks['expo-router'], Link, Redirect: 'Redirect' },
       '@/stores/session': dashboardSession({ id: 'site-1', name: 'Site', domain: 'site.test' }) });
     const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
-    return React.createElement(Detail, { metric: 'visitors', loadDetail: loader });
+    return React.createElement(Detail, { anchor: 'visitors', loadDetail: loader });
   };
-  let empty; await act(async () => { empty = create(make(async () => ({ total: 0, points: [] }))); });
-  assert.match(text(empty.toJSON()), /No data yetNo visitors were recorded/);
+  let empty; await act(async () => { empty = create(make(async () => ({ overview: {}, points: [] }))); });
+  assert.match(text(empty.toJSON()), /Unique UsersNo data was recorded for this range/);
   await act(async () => empty.unmount());
   let failed; await act(async () => { failed = create(make(async () => { throw new Error('Visitors unavailable'); })); });
   assert.match(text(failed.toJSON()), /Unable to load dataVisitors unavailable/);
@@ -976,31 +975,73 @@ test('empty charts have no inspection control and large text stacks all six dash
   assert.ok(dashboard.root.findAllByType(MetricCard).every(card => card.props.singleColumn));
 });
 
-test('all five additional KPI details render their own formatted series, inspect it and expand it', async t => {
+test('Sessions anchors to the second chart after loading, with all six charts inspectable and expandable', async t => {
   t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-20T01:30:00Z') });
+  const originalFrame = global.requestAnimationFrame;
+  let nextFrame;
+  global.requestAnimationFrame = callback => { nextFrame = callback; return 1; };
+  t.after(() => { global.requestAnimationFrame = originalFrame; });
   const load = createLoader({ ...baseMocks, '@/stores/session': dashboardSession({ id: '1', name: 'Site', domain: 'site.test' }) });
   const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
-  const { dailyChartData } = load('src/features/overview/traffic-chart.tsx');
-  const points = [{ time: '2026-10-20 00:00:00', users: 99, sessions: 19, pageviews: 40, pages_per_session: 1.6, bounce_rate: 87.2, session_duration: 64 }];
-  const previous = [{ ...points[0], time: '2026-10-19 00:00:00', users: 500, sessions: 10, pageviews: 30, pages_per_session: 2.1, bounce_rate: 70, session_duration: 40 }];
-  for (const [metric, field, label, expected] of [
-    ['sessions', 'sessions', 'Sessions', '19'], ['pageviews', 'pageviews', 'Pageviews', '40'],
-    ['pages_per_session', 'pages_per_session', 'Pages per Session', '1.6'], ['bounce_rate', 'bounce_rate', 'Bounce Rate', '87.2%'],
-    ['avg_session_duration', 'session_duration', 'Session Duration', '1m 4s'],
+  const overview = { users: 99, sessions: 19, pageviews: 40, pages_per_session: 1.6, bounce_rate: 87.2, session_duration: 64 };
+  const points = [{ time: '2026-10-20 00:00:00', ...overview }];
+  const yesterday = [{ ...points[0], time: '2026-10-19 00:00:00', users: 500, sessions: 10 }];
+  const pending = deferred();
+  const offsets = [];
+  let tree;
+  await act(async () => {
+    tree = create(React.createElement(Detail, { anchor: 'sessions', loadDetail: () => pending.promise }), {
+      createNodeMock: ({ type }) => type === 'ScrollView' ? { scrollTo: offset => offsets.push(offset) } : null,
+    });
+  });
+  assert.equal(tree.root.findAllByType('Svg').length, 0);
+  await act(async () => pending.resolve({ overview, points, yesterday, comparisonError: null }));
+  assert.deepEqual(tree.root.findAll(node => node.type === 'View' && node.props.nativeID?.startsWith('metric-'))
+    .map(node => node.props.nativeID),
+  ['metric-visitors', 'metric-sessions', 'metric-pageviews', 'metric-pages_per_session', 'metric-bounce_rate', 'metric-avg_session_duration']);
+  const section = metric => tree.root.findByProps({ nativeID: `metric-${metric}` });
+  assert.equal(section('visitors').props.onLayout, undefined);
+  assert.equal(section('pageviews').props.onLayout, undefined);
+  section('sessions').props.onLayout({ nativeEvent: { layout: { y: 420 } } });
+  assert.deepEqual(offsets, []);
+  nextFrame();
+  assert.deepEqual(offsets, [{ y: 408, animated: false }]);
+  nextFrame = null;
+  section('sessions').props.onLayout({ nativeEvent: { layout: { y: 460 } } });
+  assert.equal(nextFrame, null, 'a later layout pass must not move the user back to the anchor');
+
+  for (const [metric, label, expected] of [
+    ['visitors', 'Unique Users', '99'], ['sessions', 'Sessions', '19'], ['pageviews', 'Pageviews', '40'],
+    ['pages_per_session', 'Pages per Session', '1.6'], ['bounce_rate', 'Bounce Rate', '87.2%'],
+    ['avg_session_duration', 'Session Duration', '1m 4s'],
   ]) {
-    const frame = dailyChartData(points, previous, 'UTC', new Date(), field);
-    assert.equal(frame.values[field][1], points[0][field]);
-    assert.equal(frame.comparisonValues[1], previous[0][field]);
-    let tree; await act(async () => { tree = create(React.createElement(Detail, { metric, loadDetail: async () => ({ total: points[0][field], points, yesterday: previous, comparisonError: null }) })); });
-    assert.ok(text(tree.toJSON()).includes(`${expected}${label}`));
-    const chart = tree.root.findByProps({ accessibilityRole: 'adjustable' });
-    await act(async () => chart.props.onPress({ nativeEvent: { locationX: 13 } }));
-    assert.ok(tree.root.findByProps({ accessibilityRole: 'adjustable' }).props.accessibilityValue.text.includes(`${label}: ${expected}`));
-    await act(async () => tree.root.findByProps({ accessibilityLabel: `Expand ${label} chart` }).props.onPress());
-    assert.equal(tree.root.findAllByType('Svg').length, 2);
-    assert.ok(text(tree.toJSON()).includes(`${label} trend`));
-    await act(async () => tree.unmount());
+    assert.ok(text(section(metric)).includes(`${label}${expected}`));
+    const chart = () => section(metric).findByProps({ accessibilityRole: 'adjustable' });
+    await act(async () => chart().props.onPress({ nativeEvent: { locationX: 13 } }));
+    assert.ok(chart().props.accessibilityValue.text.includes(`${label}: ${expected}`));
+    await act(async () => section(metric).findByProps({ accessibilityLabel: `Expand ${label} chart` }).props.onPress());
+    assert.equal(tree.root.findAllByType('Svg').length, 7);
+    assert.ok(text(tree.root.findByType('Modal')).includes(`${label} trend`));
+    await act(async () => tree.root.findByType('Modal').props.onRequestClose());
   }
+  await act(async () => tree.unmount());
+});
+
+test('an older Rybbit server can omit individual series or comparisons without hiding available charts', async () => {
+  const load = createLoader({ ...baseMocks, '@/stores/session': dashboardSession({ id: '1', name: 'Site', domain: 'site.test' }) });
+  const Detail = load('src/features/metrics/metric-detail-screen.tsx').default;
+  const overview = { users: 4, pageviews: 5, sessions: 7 };
+  const points = [{ time: '2026-01-01 00:00:00', ...overview }];
+  const yesterday = [{ time: '2025-12-31 00:00:00', users: 3, pageviews: 4 }];
+  let tree;
+  await act(async () => {
+    tree = create(React.createElement(Detail, { anchor: 'bounce_rate', loadDetail: async () => ({ overview, points, yesterday, comparisonError: null }) }));
+  });
+  assert.equal(tree.root.findAllByType('Svg').length, 3);
+  assert.match(text(tree.root.findByProps({ nativeID: 'metric-bounce_rate' })), /trend is unavailable/);
+  assert.match(text(tree.root.findByProps({ nativeID: 'metric-sessions' })), /Yesterday comparison unavailable/);
+  assert.doesNotMatch(text(tree.root.findByProps({ nativeID: 'metric-visitors' })), /Yesterday comparison unavailable/);
+  await act(async () => tree.unmount());
 });
 
 test('Explore source and browser clicks requery every section, cancel old requests and expose removable shared filters', async t => {

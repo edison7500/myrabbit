@@ -44,7 +44,10 @@ export default function StartupScreen() {
     {serverUrl ? <Pressable accessibilityRole="button" onPress={() => { refresh(); }} style={styles.secondary}>
       <Text style={styles.link}>{error ? 'Try again' : 'Refresh sites'}</Text>
     </Pressable> : null}
-    <Pressable accessibilityRole="button" onPress={() => router.push('/connect')}
+    <Pressable accessibilityRole="button" onPress={() => {
+      if (serverUrl) router.push('/connect');
+      else router.push({ pathname: '/connection-form', params: { action: 'add' } });
+    }}
       style={({ pressed }) => [styles.button, pressed && { opacity: 0.65 }]}>
       <Text style={styles.label}>Add a site</Text>
     </Pressable>

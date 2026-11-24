@@ -32,7 +32,7 @@ async function startup(session, { loadSites = async () => [], select } = {}) {
   return { tree, routes, chosen, async unmount() { await act(async () => tree.unmount()); } };
 }
 
-test('startup waits for readiness and offers Add a site without automatically opening a modal', async () => {
+test('startup waits for readiness and Add a site opens the connection form directly', async () => {
   const view = await startup({ ready: false, serverUrl: null, site: null });
   assert.deepEqual(view.routes, []);
   assert.ok(view.tree.root.findByType('ActivityIndicator'));
@@ -41,17 +41,19 @@ test('startup waits for readiness and offers Add a site without automatically op
   assert.deepEqual(ready.routes, []);
   assert.equal(ready.tree.root.findByType('Text').props.children, 'Add a site');
   await act(async () => ready.tree.root.findByType('Pressable').props.onPress());
-  assert.deepEqual(ready.routes, ['/connect']);
+  assert.deepEqual(ready.routes, [{ pathname: '/connection-form', params: { action: 'add' } }]);
   await ready.unmount();
 });
 
-test('an empty server shows a main-page empty state and opens site management only in a modal', async () => {
+test('an empty server keeps connection setup and site management available in the modal', async () => {
   const view = await startup({ ready: true, serverUrl: connection, site: null });
   assert.deepEqual(view.routes, []);
   assert.equal(view.tree.root.findByType('Screen').props.title, 'No sites yet');
+  const add = view.tree.root.findAllByType('Pressable').find(node => node.findByType('Text').props.children === 'Add a site');
   const manage = view.tree.root.findAllByType('Pressable').find(node => node.findByType('Text').props.children === 'Manage sites');
+  await act(async () => add.props.onPress());
   await act(async () => manage.props.onPress());
-  assert.deepEqual(view.routes, ['/sites']);
+  assert.deepEqual(view.routes, ['/connect', '/sites']);
   await view.unmount();
 });
 

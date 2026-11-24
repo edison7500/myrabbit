@@ -22,8 +22,8 @@ MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your pho
 
 ## Features
 
-- **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges. All six icon-labeled cards open their own interactive trend chart, with no disclosure chevrons.
-- **Metric chart orientation:** metric details follow device rotation only while that page is visible; other pages stay portrait. Landscape shows the chart with a fixed header and large back control; rotate upright to restore the details. The fullscreen button opens a chart in the current orientation with a native fade, and the chart continues to follow rotation. Safe areas and scrollable details support smaller screens and larger text.
+- **Dashboard:** unique users, sessions, pageviews, pages per session, bounce rate, and session duration, with previous-period comparisons when available and selectable date ranges. Each card opens Metric Trends and takes you to its chart. All six charts are on the same scrollable page in Dashboard order.
+- **Metric chart orientation:** Metric Trends follows device rotation. In landscape, the chart opened from the Dashboard fills the screen. Rotate upright to return to the chart list. Each chart's fullscreen button opens it in the current orientation with a native fade. Safe areas and scrollable details support smaller screens and larger text.
 - **iOS Home Screen widgets:** Small shows unique users; Medium shows users, pageviews, and bounce rate; Large shows all six metrics, the site, and the last successful update. Widgets show Today for the selected site and analytics timezone, with the same values and comparisons as the unfiltered Dashboard.
 - **Traffic exploration:** visitor/pageview charts, referrers, content, technology, locations, events, and a weekly trends heatmap, with detailed rankings. Browser, device, operating system, screen size, and referrer rows use matching Lucide icons in both previews and full lists, with light/dark appearance support.
 - **Click filters:** tap a source or browser row in Explore or its full list to filter analytics on the server. Source and browser filters combine; another value replaces the same dimension, and tapping the selected value removes it. Active chips on Dashboard, Explore, and details let you remove individual filters or clear all. Filters are session-only and reset when switching sites or connections.
@@ -46,7 +46,7 @@ Authentic Android screenshots are still pending and will be added to this page a
 ## Getting Started
 
 1. Open your Rybbit web interface (Cloud or self-hosted) and create an API key in its settings. See Rybbit’s [API key guide](https://rybbit.com/docs/api/getting-started). The key needs access to organization/site discovery and analytics reads.
-2. Install the Android APK from [GitHub Releases](https://github.com/edison7500/myrabbit/releases/tag/v0.1.0), or build the app using the development commands below. On the startup screen, tap **Add a site**, choose Cloud or enter your self-hosted server URL, and paste the API key.
+2. Install the Android APK from [GitHub Releases](https://github.com/edison7500/myrabbit/releases/tag/v0.1.0), or build the app using the development commands below. Tap **Add a site** on the startup screen to open the connection form. Choose Cloud or enter your self-hosted server URL, then paste the API key.
 3. Tap **Test Connection**, then **Save & Continue** after verification. MyRabbit opens the first accessible site; use the site switcher to choose another.
 
 You need an existing Rybbit site with analytics data. MyRabbit does not create server-side sites or sign in with a username/password. Removing a connection clears only local credentials and site selection; your Rybbit sites and analytics remain on the server. Self-hosted API availability varies by server version; browser previews also require server CORS support.
@@ -74,6 +74,8 @@ Use Node.js 24 LTS and npm:
 npm ci
 npm start
 ```
+
+On macOS, `npm start` opens the project on the **iPhone 18 Pro** simulator by default. To change the target, add `IOS_SIMULATOR="iPhone 17"` to your local `.env`, or set it to a UDID from `xcrun simctl list devices available`. Use `npm start -- --metro-only` to start Metro on its own.
 
 ```sh
 npm run ios        # Local iOS build (macOS + Xcode)

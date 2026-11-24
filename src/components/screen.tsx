@@ -1,15 +1,15 @@
 import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
-import { Children, type PropsWithChildren, type ReactNode } from 'react';
+import { Children, type PropsWithChildren, type ReactNode, type Ref } from 'react';
 import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { layout, spacing, typography } from '@/constants/theme';
 
 export type ScreenSection = { key: string; header: ReactNode; content: ReactNode };
-type Props = PropsWithChildren<{ title: string; description: ReactNode; navigationHeader?: boolean; tabScreen?: boolean; refreshing?: boolean; onRefresh?: () => void; sections?: readonly ScreenSection[] }>;
+type Props = PropsWithChildren<{ title: string; description: ReactNode; navigationHeader?: boolean; tabScreen?: boolean; refreshing?: boolean; onRefresh?: () => void; sections?: readonly ScreenSection[]; scrollRef?: Ref<ScrollView> }>;
 
-export function Screen({ title, description, children, navigationHeader = false, tabScreen = false, refreshing = false, onRefresh, sections }: Props) {
+export function Screen({ title, description, children, navigationHeader = false, tabScreen = false, refreshing = false, onRefresh, sections, scrollRef }: Props) {
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   const insets = useSafeAreaInsets();
@@ -20,7 +20,7 @@ export function Screen({ title, description, children, navigationHeader = false,
   const stickyHeaderIndices = sections?.map((_, index) => (showHeading ? 1 : 0) + introductoryContent.length + index * 2);
   return (
     <SafeAreaView style={styles.safeArea} edges={{ top: navigationHeader ? 'off' : 'additive', bottom: tabScreen || automaticInsets ? 'off' : 'additive', left: 'additive', right: 'additive' }}>
-      <ScrollView stickyHeaderIndices={stickyHeaderIndices} contentInsetAdjustmentBehavior={automaticInsets ? 'automatic' : 'never'} automaticallyAdjustContentInsets={automaticInsets} alwaysBounceVertical={automaticInsets || !!onRefresh} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined} contentContainerStyle={[styles.content, sections && { gap: 0 }, floatingTabs && { paddingBottom: 102 + insets.bottom }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag">
+      <ScrollView ref={scrollRef} stickyHeaderIndices={stickyHeaderIndices} contentInsetAdjustmentBehavior={automaticInsets ? 'automatic' : 'never'} automaticallyAdjustContentInsets={automaticInsets} alwaysBounceVertical={automaticInsets || !!onRefresh} refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} colors={[colors.accent]} /> : undefined} contentContainerStyle={[styles.content, sections && { gap: 0 }, floatingTabs && { paddingBottom: 102 + insets.bottom }]} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets keyboardDismissMode="on-drag">
         {showHeading ? <View style={[styles.heading, navigationHeader && { paddingTop: 0 }, sections && styles.sectionContent]}>
           {!navigationHeader ? <>
             <Text style={styles.brand}>MyRabbit</Text>

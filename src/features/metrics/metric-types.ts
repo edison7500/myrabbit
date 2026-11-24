@@ -1,15 +1,16 @@
-import type { Overview } from '@/api/rybbit/client';
+import type { OverviewMetric } from '@/api/rybbit/client';
 
-export type MetricType = 'visitors' | 'pageviews' | 'sessions' | 'bounce_rate' | 'pages_per_session' | 'avg_session_duration';
+export const metricDefinitions = {
+  visitors: { title: 'Unique Users', apiMetric: 'users' },
+  sessions: { title: 'Sessions', apiMetric: 'sessions' },
+  pageviews: { title: 'Pageviews', apiMetric: 'pageviews' },
+  pages_per_session: { title: 'Pages per Session', apiMetric: 'pages_per_session' },
+  bounce_rate: { title: 'Bounce Rate', apiMetric: 'bounce_rate' },
+  avg_session_duration: { title: 'Session Duration', apiMetric: 'session_duration' },
+} as const satisfies Record<string, { title: string; apiMetric: OverviewMetric }>;
 
-export const metricDefinitions: Record<MetricType, { title: string; apiMetric: keyof Overview; detailAvailable: boolean }> = {
-  visitors: { title: 'Visitors', apiMetric: 'users', detailAvailable: true },
-  pageviews: { title: 'Pageviews', apiMetric: 'pageviews', detailAvailable: true },
-  sessions: { title: 'Sessions', apiMetric: 'sessions', detailAvailable: true },
-  bounce_rate: { title: 'Bounce Rate', apiMetric: 'bounce_rate', detailAvailable: true },
-  pages_per_session: { title: 'Pages per Session', apiMetric: 'pages_per_session', detailAvailable: true },
-  avg_session_duration: { title: 'Session Duration', apiMetric: 'session_duration', detailAvailable: true },
-};
+export type MetricType = keyof typeof metricDefinitions;
+export const metricOrder = Object.keys(metricDefinitions) as MetricType[];
 
 export function isMetricType(value: string): value is MetricType {
   return Object.hasOwn(metricDefinitions, value);

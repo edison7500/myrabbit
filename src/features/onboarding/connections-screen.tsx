@@ -60,7 +60,7 @@ export default function ConnectionsScreen() {
 }
 
 const themedStyles = createThemedStyles(colors => ({
-  connections: { flex: 1, gap: 12 },
+  connections: { gap: 12 },
   note: { color: colors.muted, fontSize: 14, lineHeight: 22 },
   error: { color: colors.danger, fontSize: 14, lineHeight: 22 },
   add: { minHeight: 54, borderRadius: 999, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
