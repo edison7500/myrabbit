@@ -4,7 +4,7 @@ const plist = require('@expo/plist').default;
 const { withDangerousMod, withEntitlementsPlist, withInfoPlist, withXcodeProject } = require('expo/config-plugins');
 
 const TARGET_NAME = 'MyRabbitWidgets';
-const SOURCE_FILES = ['MyRabbitWidget.swift', 'WidgetSnapshot.swift'];
+const SOURCE_FILES = ['MyRabbitWidget.swift', 'WidgetSnapshot.swift', 'WidgetRefresh.swift'];
 const PROJECT_FILES = [...SOURCE_FILES, 'Info.plist', `${TARGET_NAME}.entitlements`];
 const unquote = (value) => typeof value === 'string' ? value.replace(/^"|"$/g, '') : value;
 
@@ -15,10 +15,18 @@ function identifiers(config) {
   return {
     bundleIdentifier: `${config.ios.bundleIdentifier}.widgets`,
     appGroup: `group.${config.ios.bundleIdentifier}.widgets`,
+    keychainGroup: `$(AppIdentifierPrefix)${config.ios.bundleIdentifier}.widget-refresh`,
   };
 }
 
-function withExtensionSigningMetadata(config, bundleIdentifier, appGroup) {
+function extensionEntitlements(appGroup, keychainGroup) {
+  return {
+    'com.apple.security.application-groups': [appGroup],
+    'keychain-access-groups': [keychainGroup],
+  };
+}
+
+function withExtensionSigningMetadata(config, bundleIdentifier, appGroup, keychainGroup) {
   config.extra ??= {};
   config.extra.eas ??= {};
   config.extra.eas.build ??= {};
@@ -31,25 +39,29 @@ function withExtensionSigningMetadata(config, bundleIdentifier, appGroup) {
     {
       targetName: TARGET_NAME,
       bundleIdentifier,
-      entitlements: { 'com.apple.security.application-groups': [appGroup] },
+      entitlements: extensionEntitlements(appGroup, keychainGroup),
     },
   ];
   return config;
 }
 
-function withWidgetFiles(config, appGroup) {
+function withWidgetFiles(config, appGroup, keychainGroup) {
   return withDangerousMod(config, ['ios', async (mod) => {
     const sourceRoot = path.join(mod.modRequest.projectRoot, 'modules/myrabbit-widgets');
     const outputRoot = path.join(mod.modRequest.platformProjectRoot, TARGET_NAME);
     await fs.mkdir(outputRoot, { recursive: true });
     await fs.copyFile(path.join(sourceRoot, 'extension/MyRabbitWidget.swift'), path.join(outputRoot, 'MyRabbitWidget.swift'));
+    await fs.copyFile(path.join(sourceRoot, 'extension/WidgetRefresh.swift'), path.join(outputRoot, 'WidgetRefresh.swift'));
     await fs.copyFile(path.join(sourceRoot, 'ios/WidgetSnapshot.swift'), path.join(outputRoot, 'WidgetSnapshot.swift'));
     const info = plist.parse(await fs.readFile(path.join(sourceRoot, 'extension/Info.plist'), 'utf8'));
     info.MyRabbitWidgetsAppGroup = appGroup;
+    info.MyRabbitWidgetsKeychainGroup = keychainGroup;
+    info.NSAppTransportSecurity = { NSAllowsLocalNetworking: true, ...mod.ios?.infoPlist?.NSAppTransportSecurity };
+    if (mod.ios?.infoPlist?.NSLocalNetworkUsageDescription) {
+      info.NSLocalNetworkUsageDescription = mod.ios.infoPlist.NSLocalNetworkUsageDescription;
+    }
     await fs.writeFile(path.join(outputRoot, 'Info.plist'), plist.build(info));
-    await fs.writeFile(path.join(outputRoot, `${TARGET_NAME}.entitlements`), plist.build({
-      'com.apple.security.application-groups': [appGroup],
-    }));
+    await fs.writeFile(path.join(outputRoot, `${TARGET_NAME}.entitlements`), plist.build(extensionEntitlements(appGroup, keychainGroup)));
     return mod;
   }]);
 }
@@ -71,13 +83,28 @@ function withWidgetTarget(config, bundleIdentifier) {
     }
     const [widgetId, widgetTarget] = widgetEntry;
     const groups = project.hash.project.objects.PBXGroup;
-    let groupEntry = Object.entries(groups).find(([id, group]) => !id.endsWith('_comment')
-      && unquote(group.name) === TARGET_NAME);
-    if (!groupEntry) {
+    const rootGroup = project.getFirstProject().firstProject.mainGroup;
+    const widgetGroups = groups[rootGroup].children.filter(({ value }) => {
+      const group = groups[value];
+      return group && unquote(group.path ?? group.name) === TARGET_NAME;
+    });
+    if (!widgetGroups.length) {
       const added = project.addPbxGroup(PROJECT_FILES, TARGET_NAME, TARGET_NAME);
-      const rootGroup = project.getFirstProject().firstProject.mainGroup;
       project.addToPbxGroup(added.uuid, rootGroup);
-      groupEntry = [added.uuid, added.pbxGroup];
+    } else if (widgetGroups.length > 1) {
+      // CocoaPods may omit the redundant group name. Merge duplicate groups
+      // created by earlier plugin runs before Xcode loads the generated project.
+      const [first, ...duplicates] = widgetGroups;
+      const group = groups[first.value];
+      const children = new Map(group.children.map(child => [child.value, child]));
+      for (const { value } of duplicates) {
+        for (const child of groups[value].children) children.set(child.value, child);
+        delete groups[value];
+        delete groups[`${value}_comment`];
+      }
+      group.children = [...children.values()];
+      const duplicateIds = new Set(duplicates.map(child => child.value));
+      groups[rootGroup].children = groups[rootGroup].children.filter(child => !duplicateIds.has(child.value));
     }
 
     for (const [phaseType, title, files] of [
@@ -87,6 +114,13 @@ function withWidgetTarget(config, bundleIdentifier) {
     ]) {
       const exists = widgetTarget.buildPhases.some(({ value }) => project.hash.project.objects[phaseType]?.[value]);
       if (!exists) project.addBuildPhase(files, phaseType, title, widgetId);
+    }
+    if (widgetGroups.length) {
+      const groupId = widgetGroups[0].value;
+      const references = project.hash.project.objects.PBXFileReference;
+      if (!groups[groupId].children.some(({ value }) => unquote(references?.[value]?.path) === 'WidgetRefresh.swift')) {
+        project.addSourceFile('WidgetRefresh.swift', { target: widgetId }, groupId);
+      }
     }
 
     const configurationLists = project.pbxXCConfigurationList();
@@ -139,17 +173,22 @@ function withWidgetTarget(config, bundleIdentifier) {
 }
 
 module.exports = function withIosWidgets(config) {
-  const { bundleIdentifier, appGroup } = identifiers(config);
-  config = withExtensionSigningMetadata(config, bundleIdentifier, appGroup);
+  const { bundleIdentifier, appGroup, keychainGroup } = identifiers(config);
+  const privateGroup = `$(AppIdentifierPrefix)${config.ios.bundleIdentifier}`;
+  config = withExtensionSigningMetadata(config, bundleIdentifier, appGroup, keychainGroup);
   config = withEntitlementsPlist(config, (mod) => {
     const groups = mod.modResults['com.apple.security.application-groups'] ?? [];
     mod.modResults['com.apple.security.application-groups'] = [...new Set([...groups, appGroup])];
+    // The first access group stays the default for existing SecureStore items.
+    const keychain = mod.modResults['keychain-access-groups'];
+    mod.modResults['keychain-access-groups'] = [...new Set([...(keychain?.length ? keychain : [privateGroup]), keychainGroup])];
     return mod;
   });
   config = withInfoPlist(config, (mod) => {
     mod.modResults.MyRabbitWidgetsAppGroup = appGroup;
+    mod.modResults.MyRabbitWidgetsKeychainGroup = keychainGroup;
     return mod;
   });
-  config = withWidgetFiles(config, appGroup);
+  config = withWidgetFiles(config, appGroup, keychainGroup);
   return withWidgetTarget(config, bundleIdentifier);
 };

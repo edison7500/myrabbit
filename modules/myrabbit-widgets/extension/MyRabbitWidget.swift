@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import WidgetKit
 
 private enum WidgetColors {
@@ -9,49 +10,60 @@ private enum WidgetColors {
   static let accent = Color(red: 167 / 255, green: 139 / 255, blue: 250 / 255)
   static let positive = Color(red: 117 / 255, green: 205 / 255, blue: 167 / 255)
   static let negative = Color(red: 255 / 255, green: 155 / 255, blue: 149 / 255)
-  static let warning = Color(red: 231 / 255, green: 190 / 255, blue: 119 / 255)
 }
 
 struct DashboardEntry: TimelineEntry {
   let date: Date
   let snapshot: WidgetSnapshot?
   var hasContext: Bool = false
+  var favicon: Data? = nil
+  var canRefresh: Bool = false
 }
 
 struct DashboardProvider: TimelineProvider {
   func placeholder(in context: Context) -> DashboardEntry {
-    DashboardEntry(date: Date(), snapshot: .preview)
+    DashboardEntry(date: Date(), snapshot: .preview, canRefresh: true)
   }
 
   func getSnapshot(in context: Context, completion: @escaping (DashboardEntry) -> Void) {
     let cache = WidgetSnapshotStore.loadCache()
-    completion(DashboardEntry(date: Date(), snapshot: context.isPreview ? .preview : cache.snapshot, hasContext: cache.hasContext))
+    completion(DashboardEntry(date: Date(), snapshot: context.isPreview ? .preview : cache.snapshot,
+                              hasContext: cache.hasContext, favicon: context.isPreview ? nil : cache.favicon,
+                              canRefresh: context.isPreview || canRefresh(cache.refreshID)))
   }
 
   func getTimeline(in context: Context, completion: @escaping (Timeline<DashboardEntry>) -> Void) {
     let now = Date()
     let cache = WidgetSnapshotStore.loadCache()
     let snapshot = cache.snapshot
-    var entries = [DashboardEntry(date: now, snapshot: snapshot, hasContext: cache.hasContext)]
+    let enabled = canRefresh(cache.refreshID)
+    let current = DashboardEntry(date: now, snapshot: snapshot, hasContext: cache.hasContext, favicon: cache.favicon,
+                                 canRefresh: enabled)
+    var entries = [current]
 
-    if let snapshot, !snapshot.isStale(at: now) {
+    if let snapshot, snapshot.reportDate == WidgetSnapshot.reportingDate(now, timeZone: snapshot.timeZone) {
       var calendar = Calendar(identifier: .gregorian)
       calendar.timeZone = TimeZone(identifier: snapshot.timeZone) ?? .gmt
-      let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) ?? now.addingTimeInterval(86_400)
-      let staleAt = min(snapshot.updatedDate.addingTimeInterval(3_600), nextDay)
-      // A dated entry changes the stale label even if iOS delays the next refresh request.
-      entries.append(DashboardEntry(date: staleAt, snapshot: snapshot))
+      if let nextDay = calendar.dateInterval(of: .day, for: now)?.end {
+        entries.append(DashboardEntry(date: nextDay, snapshot: snapshot,
+                                      hasContext: cache.hasContext, favicon: cache.favicon, canRefresh: enabled))
+      }
     }
 
-    // WidgetKit owns the actual schedule. The extension only rereads the shared cache;
-    // the app refreshes analytics while it is running and never shares credentials.
+    // Scheduled timelines reread the cache. An explicit button tap fetches live metrics.
     completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(30 * 60))))
+  }
+
+  private func canRefresh(_ id: UUID?) -> Bool {
+    guard #available(iOS 17.0, *), let id else { return false }
+    return WidgetRefreshCredential.load(matching: id) != nil
   }
 }
 
 struct DashboardWidgetView: View {
   @Environment(\.widgetFamily) private var family
   let entry: DashboardEntry
+  private let dashboardURL = URL(string: "myrabbit://widget")!
 
   var body: some View {
     Group {
@@ -62,7 +74,7 @@ struct DashboardWidgetView: View {
       }
     }
     .foregroundStyle(WidgetColors.text)
-    .widgetURL(URL(string: "myrabbit://widget"))
+    .widgetURL(dashboardURL)
     .modifier(WidgetBackground())
   }
 
@@ -106,66 +118,110 @@ struct DashboardWidgetView: View {
   }
 
   private func header(_ snapshot: WidgetSnapshot) -> some View {
-    VStack(alignment: .leading, spacing: 3) {
-      HStack(spacing: 6) {
-        Text("MyRabbit")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(WidgetColors.accent)
-        if family != .systemSmall {
-          Spacer(minLength: 4)
-          Text(snapshot.reportDate == WidgetSnapshot.reportingDate(entry.date, timeZone: snapshot.timeZone) ? "Today" : snapshot.reportDate)
-            .font(.caption2)
-            .foregroundStyle(WidgetColors.muted)
-        }
+    HStack(spacing: 6) {
+      if let bytes = entry.favicon, let icon = UIImage(data: bytes) {
+        Image(uiImage: icon)
+          .resizable()
+          .scaledToFit()
+          .frame(width: 16, height: 16)
+          .clipShape(RoundedRectangle(cornerRadius: 3))
+          .accessibilityHidden(true)
       }
       Text(snapshot.siteDomain)
-        .font(.caption2)
-        .foregroundStyle(WidgetColors.muted)
+        .font(.caption.weight(.semibold))
         .lineLimit(1)
+        .minimumScaleFactor(0.75)
         .truncationMode(.middle)
+        .layoutPriority(1)
+      Spacer(minLength: 0)
+      if #available(iOS 17.0, *), entry.canRefresh {
+        Button(intent: RefreshDashboardIntent()) {
+          refreshIcon
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Refresh dashboard")
+      }
     }
   }
 
+  private var refreshIcon: some View {
+    RefreshIcon()
+      .stroke(WidgetColors.accent, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+      .frame(width: 16, height: 16)
+      .frame(width: 28, height: 28)
+      .contentShape(Rectangle())
+  }
+
   private func footer(_ snapshot: WidgetSnapshot) -> some View {
-    let stale = snapshot.isStale(at: entry.date)
     let formatter = DateFormatter()
     formatter.timeZone = TimeZone(identifier: snapshot.timeZone)
     formatter.timeStyle = .short
-    formatter.dateStyle = snapshot.reportDate == WidgetSnapshot.reportingDate(entry.date, timeZone: snapshot.timeZone) ? .none : .short
+    let isToday = snapshot.reportDate == WidgetSnapshot.reportingDate(entry.date, timeZone: snapshot.timeZone)
     let timestamp = formatter.string(from: snapshot.updatedDate)
 
     return HStack(spacing: 4) {
       Text("Updated \(timestamp)")
         .lineLimit(1)
-        .minimumScaleFactor(0.75)
-      if stale {
-        Text("· Cached")
-          .foregroundStyle(WidgetColors.warning)
-          .fixedSize()
-      }
+        .minimumScaleFactor(0.7)
+        .accessibilityLabel("Last successful update \(timestamp)")
+      Spacer(minLength: 0)
+      Text(isToday ? "Today" : snapshot.reportDate)
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .accessibilityLabel("Reporting period: \(isToday ? "Today" : snapshot.reportDate)")
     }
     .font(.system(size: family == .systemSmall ? 9 : 10))
     .foregroundStyle(WidgetColors.muted)
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Last successful update \(timestamp). \(stale ? "Cached data. Open MyRabbit to refresh." : "")")
   }
 
   private var emptyState: some View {
     VStack(alignment: .leading, spacing: 9) {
-      Text("MyRabbit")
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(WidgetColors.accent)
       Spacer(minLength: 0)
-      Text(entry.hasContext ? "Waiting for analytics" : "Your dashboard, at a glance")
+      Text(entry.hasContext ? "Waiting for analytics" : "Choose a site")
         .font(.headline)
         .lineLimit(3)
-      Text(entry.hasContext ? "Open MyRabbit to load Today’s metrics." : "Open MyRabbit and choose a site to update this widget.")
+      Text(entry.hasContext ? "Open the app to load Today’s metrics." : "Open the app and select a website.")
         .font(.caption)
         .foregroundStyle(WidgetColors.muted)
         .lineLimit(4)
       Spacer(minLength: 0)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+  }
+}
+
+// Lucide RefreshCw, adapted from its SVG path for SwiftUI.
+// Copyright (c) 2026 Lucide Icons and Contributors
+// Permission to use, copy, modify, and/or distribute this software for any
+// purpose with or without fee is hereby granted, provided that the above
+// copyright notice and this permission notice appear in all copies.
+// THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+// WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+// WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+// ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+// OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+private struct RefreshIcon: Shape {
+  func path(in rect: CGRect) -> Path {
+    let scale = min(rect.width, rect.height) / 24
+    func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+      CGPoint(x: rect.midX + (x - 12) * scale, y: rect.midY + (y - 12) * scale)
+    }
+    var path = Path()
+    for mirrored in [false, true] {
+      func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+        mirrored ? point(24 - x, 24 - y) : point(x, y)
+      }
+      path.move(to: p(3, 12))
+      path.addQuadCurve(to: p(12, 3), control: p(3, 3))
+      path.addQuadCurve(to: p(18.74, 5.74), control: p(15.9, 3))
+      path.addLine(to: p(21, 8))
+      path.move(to: p(21, 3))
+      path.addLine(to: p(21, 8))
+      path.addLine(to: p(16, 8))
+    }
+    return path
   }
 }
 
@@ -253,7 +309,7 @@ struct MyRabbitDashboardWidget: Widget {
       DashboardWidgetView(entry: entry)
     }
     .configurationDisplayName("Dashboard Metrics")
-    .description("Today’s analytics for the last site opened in MyRabbit. Open the app to refresh cached data.")
+    .description("Today’s analytics for the last site opened in MyRabbit.")
     .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
   }
 }

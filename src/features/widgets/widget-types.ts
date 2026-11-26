@@ -19,4 +19,7 @@ export type WidgetSnapshot = {
 export type WidgetBridge = {
   setContext: (context: string | null) => void;
   writeSnapshot: (context: string, json: string) => void;
+  writeFavicon?: (context: string, domain: string, base64: string) => Promise<boolean>;
+  refreshRegistration?: (context: string) => { id: string; accessGroup: string } | null;
+  reloadWidget?: () => void;
 };

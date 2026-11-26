@@ -1,16 +1,23 @@
 import { getOverview, getPreviousOverview, type Overview, type Site } from '@/api/rybbit/client';
 import type { AnalyticsQueryContext } from '@/api/rybbit/analytics-context';
-import { widgetBridge } from './native-widget';
+import { getFavicon, getWebsiteFavicon } from '@/api/rybbit/favicon';
+import { saveWidgetRefreshCredential, widgetBridge } from './native-widget';
 import { createWidgetSnapshot, isWidgetReportingContext, widgetContextKey, widgetReportDate } from './widget-snapshot';
 
 let activeContext: string | null = null;
 let revision = 0;
 let requestSequence = 0;
+let savedFavicon: string | undefined;
+let faviconRequest: AbortController | undefined;
+let registeredRevision: number | undefined;
 
 export function setWidgetContext(serverUrl: string | null, site: Site | null, timeZone: string) {
   const next = serverUrl && site ? widgetContextKey(serverUrl, site.id, timeZone) : null;
   activeContext = next;
   revision++;
+  savedFavicon = undefined;
+  faviconRequest?.abort();
+  faviconRequest = undefined;
   try { widgetBridge?.setContext(next); } catch {
     // Widget storage is optional. Invalidate pending app writes even if the
     // shared container is temporarily unavailable, and retry on the next sync.
@@ -18,6 +25,42 @@ export function setWidgetContext(serverUrl: string | null, site: Site | null, ti
 }
 
 export function currentWidgetRevision() { return revision; }
+
+async function registerWidgetRefresh(context: string, serverUrl: string, version: number) {
+  if (!widgetBridge?.refreshRegistration || registeredRevision === version) return;
+  registeredRevision = version;
+  try {
+    const saved = await saveWidgetRefreshCredential(context, serverUrl, () => revision === version && activeContext === context);
+    if (!saved && registeredRevision === version) registeredRevision = undefined;
+  } catch {
+    // Analytics and the existing snapshot remain available if Keychain sharing fails.
+    if (registeredRevision === version) registeredRevision = undefined;
+  }
+}
+
+async function syncFavicon(contextKey: string, serverUrl: string, domain: string, version: number) {
+  if (!widgetBridge?.writeFavicon || !domain || savedFavicon === domain || faviconRequest) return;
+  const controller = new AbortController();
+  faviconRequest = controller;
+  try {
+    const { signal } = controller;
+    const isCurrent = () => !signal.aborted && revision === version;
+    const writeFavicon = widgetBridge.writeFavicon;
+    const save = (uri: string) => writeFavicon.call(widgetBridge, contextKey, domain, uri.slice(uri.indexOf(',') + 1));
+    const serverIcon = await getFavicon(serverUrl, domain, signal).catch(() => null);
+    if (!isCurrent()) return;
+    let stored = serverIcon !== null && await save(serverIcon);
+    if (!stored && isCurrent()) {
+      const websiteIcon = await getWebsiteFavicon(domain, signal);
+      if (isCurrent()) stored = await save(websiteIcon);
+    }
+    if (stored && isCurrent()) savedFavicon = domain;
+  } catch {
+    // The site's metrics and any previous icon remain available.
+  } finally {
+    if (faviconRequest === controller) faviconRequest = undefined;
+  }
+}
 
 type DashboardResult = {
   context: AnalyticsQueryContext;
@@ -64,6 +107,8 @@ export async function syncDashboardWidget(result: DashboardResult) {
     if (snapshot) {
       widgetBridge.setContext(key);
       widgetBridge.writeSnapshot(key, JSON.stringify(snapshot));
+      void registerWidgetRefresh(key, context.serverUrl, version);
+      void syncFavicon(key, context.serverUrl, site.domain.trim(), version);
     }
   } catch {
     // Preserve the cached snapshot on API, cancellation, or shared-container failure.

@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '..');
 const pluginPath = path.join(root, 'plugins/with-ios-widgets.js');
 const appGroup = 'group.im.test.myrabbit.widgets';
+const refreshGroup = '$(AppIdentifierPrefix)im.test.myrabbit.widget-refresh';
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function fixture() {
@@ -46,7 +47,11 @@ function fixture() {
         buildPhases: [{ value: 'SOURCES' }, { value: 'FRAMEWORKS' }, { value: 'RESOURCES' }],
       },
     },
-    PBXGroup: { WIDGET_GROUP: { name: 'MyRabbitWidgets', children: [] } },
+    PBXGroup: {
+      ROOT: { children: [{ value: 'WIDGET_GROUP' }] },
+      WIDGET_GROUP: { path: 'MyRabbitWidgets', children: [{ value: 'SWIFT_SOURCE' }, { value: 'REFRESH_SOURCE' }] },
+    },
+    PBXFileReference: { REFRESH_SOURCE: { path: '"WidgetRefresh.swift"' } },
     PBXSourcesBuildPhase: { SOURCES: { files: [] } },
     PBXFrameworksBuildPhase: { FRAMEWORKS: { files: [] } },
     PBXResourcesBuildPhase: { RESOURCES: { files: [] } },
@@ -124,6 +129,17 @@ test('the widget extension has a distinct Swift module name from the app bridge 
   }
 });
 
+test('reapplying the widget plugin repairs duplicate source groups from a CocoaPods project', () => {
+  const subject = fixture();
+  const groups = subject.objects.PBXGroup;
+  groups.ROOT.children.push({ value: 'DUPLICATE' });
+  groups.DUPLICATE = { name: 'MyRabbitWidgets', path: 'MyRabbitWidgets', children: [{ value: 'SWIFT_SOURCE' }] };
+  subject.apply();
+  assert.deepEqual(plain(groups.ROOT.children), [{ value: 'WIDGET_GROUP' }]);
+  assert.deepEqual(plain(groups.WIDGET_GROUP.children), [{ value: 'SWIFT_SOURCE' }, { value: 'REFRESH_SOURCE' }]);
+  assert.equal(groups.DUPLICATE, undefined);
+});
+
 test('widget entitlements and EAS signing metadata remain idempotent while retaining unrelated configuration', () => {
   const subject = fixture();
   subject.apply();
@@ -133,8 +149,10 @@ test('widget entitlements and EAS signing metadata remain idempotent while retai
   assert.deepEqual(plain(subject.state.entitlements), {
     'aps-environment': 'development',
     'com.apple.security.application-groups': ['group.existing', appGroup],
+    'keychain-access-groups': ['$(AppIdentifierPrefix)im.test.myrabbit', refreshGroup],
   });
   assert.equal(subject.state.info.MyRabbitWidgetsAppGroup, appGroup);
+  assert.equal(subject.state.info.MyRabbitWidgetsKeychainGroup, refreshGroup);
   assert.equal(subject.state.info.CFBundleDisplayName, 'Existing app name');
   const eas = subject.config.extra.eas;
   const ios = eas.build.experimental.ios;
@@ -143,7 +161,7 @@ test('widget entitlements and EAS signing metadata remain idempotent while retai
   assert.equal(subject.config.extra.retained, true);
   assert.deepEqual(plain(ios.appExtensions), [subject.shareExtension, {
     targetName: 'MyRabbitWidgets', bundleIdentifier: 'im.test.myrabbit.widgets',
-    entitlements: { 'com.apple.security.application-groups': [appGroup] },
+    entitlements: { 'com.apple.security.application-groups': [appGroup], 'keychain-access-groups': [refreshGroup] },
   }]);
 });
 

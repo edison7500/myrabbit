@@ -27,6 +27,7 @@ function synchronization(api = {}, bridgeOverride) {
   } : bridgeOverride;
   const sync = createLoader({
     './native-widget': { widgetBridge: bridge },
+    '@/api/rybbit/favicon': { getFavicon: api.favicon, getWebsiteFavicon: api.websiteFavicon },
     '@/api/rybbit/client': {
       getOverview: (...args) => { requests.push(['current', ...args]); return api.current ? api.current(...args) : Promise.resolve(values); },
       getPreviousOverview: (...args) => { requests.push(['previous', ...args]); return api.previous ? api.previous(...args) : Promise.resolve(prior); },
@@ -270,4 +271,84 @@ test('widget deep links without a connection or selected site return through gua
     assert.equal(tree.root.findByType('Redirect').props.href, '/');
     await act(async () => tree.unmount());
   }
+});
+
+test('favicon sync publishes metrics immediately and ignores an image from the previous site', async () => {
+  const pending = deferred();
+  const snapshots = []; const favicons = []; const requests = [];
+  const sync = synchronization({ favicon: (...args) => {
+    requests.push(args);
+    return requests.length === 1 ? pending.promise : Promise.resolve('data:image/x-icon;base64,Ag==');
+  } }, {
+    setContext() {},
+    writeSnapshot: (key, json) => snapshots.push([key, JSON.parse(json)]),
+    writeFavicon: async (...args) => { favicons.push(args); return true; },
+  });
+  const first = sync.activate();
+  await sync.syncDashboardWidget(first);
+  assert.equal(snapshots[0][1].siteDomain, 'example.test');
+  assert.equal(requests[0][1], 'example.test');
+  assert.deepEqual(favicons, []);
+
+  const secondSite = { ...site, id: '2', domain: 'next.test' };
+  const second = sync.activate(context({ siteId: '2' }), secondSite);
+  assert.equal(requests[0][2].aborted, true);
+  await sync.syncDashboardWidget(second);
+  pending.resolve('data:image/x-icon;base64,AQ==');
+  await sync.syncDashboardWidget(second);
+  assert.deepEqual(favicons, [[snapshots[1][0], 'next.test', 'Ag==']]);
+  assert.equal(requests.length, 2);
+});
+
+test('widget uses the website favicon when the analytics server has no usable icon', async () => {
+  const written = deferred();
+  const calls = [];
+  const sync = synchronization({
+    favicon: async () => { throw new Error('Older server'); },
+    websiteFavicon: async domain => {
+      calls.push(domain);
+      return 'data:image/x-icon;base64,AQ==';
+    },
+  }, {
+    setContext() {},
+    writeSnapshot() {},
+    writeFavicon: async (_key, domain, base64) => { written.resolve([domain, base64]); return true; },
+  });
+  await sync.syncDashboardWidget(sync.activate());
+  assert.deepEqual(await written.promise, ['example.test', 'AQ==']);
+  assert.deepEqual(calls, ['example.test']);
+});
+
+test('widget refresh credential uses the dedicated device-only Keychain group and ignores stale context', async () => {
+  const writes = [];
+  const registration = { id: 'fixture-context-id', accessGroup: 'fixture-team.widget-refresh' };
+  const pending = deferred();
+  let active = true;
+  const load = createLoader({
+    expo: { requireOptionalNativeModule: () => ({
+      refreshRegistration: contextKey => contextKey === 'current' ? registration : null,
+      reloadWidget() {},
+    }) },
+    'expo-secure-store': {
+      AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'device-only',
+      setItem: (...args) => writes.push(args),
+    },
+    '@/storage/connection': { loadConnection: () => pending.promise },
+  });
+  const { saveWidgetRefreshCredential } = load('src/features/widgets/native-widget.ios.ts');
+  const serverUrl = 'https://analytics.test';
+  const stale = saveWidgetRefreshCredential('current', serverUrl, () => active);
+  active = false;
+  pending.resolve({ baseUrl: serverUrl, apiKey: 'fixture-key' });
+  assert.equal(await stale, false);
+  assert.deepEqual(writes, []);
+  assert.equal(await saveWidgetRefreshCredential('current', serverUrl, () => true), true);
+  assert.equal(await saveWidgetRefreshCredential('other', serverUrl, () => true), false);
+  assert.equal(writes.length, 1);
+  const [[key, payload, options]] = writes;
+  assert.equal(key, 'myrabbit.widget-refresh.v1');
+  assert.deepEqual(JSON.parse(payload), { id: registration.id, serverUrl, apiKey: 'fixture-key' });
+  assert.deepEqual(options, {
+    accessGroup: registration.accessGroup, keychainService: 'myrabbit.widget-refresh', keychainAccessible: 'device-only',
+  });
 });

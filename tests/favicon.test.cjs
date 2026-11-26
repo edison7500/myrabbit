@@ -26,6 +26,45 @@ test('favicon rejects old-server errors and non-image responses', async () => {
   }
 });
 
+test('favicon data URLs preserve binary bytes and padding without a browser Base64 global', async () => {
+  const originalBtoa = global.btoa;
+  global.btoa = undefined;
+  try {
+    const { getFavicon } = createLoader()('src/api/rybbit/favicon.ts');
+    for (const bytes of [[255], [255, 16], [255, 16, 128], [255, 16, 128, 42]]) {
+      global.fetch = async () => ({
+        ok: true, headers: new Headers({ 'content-type': 'image/x-icon' }),
+        arrayBuffer: async () => Uint8Array.from(bytes).buffer,
+      });
+      const uri = await getFavicon('https://analytics.test', 'site.test', new AbortController().signal);
+      assert.equal(uri, 'data:image/x-icon;base64,' + Buffer.from(bytes).toString('base64'));
+    }
+  } finally {
+    global.btoa = originalBtoa;
+  }
+});
+
+test('website favicon fallback uses only the selected hostname and omits credentials', async () => {
+  const { getWebsiteFavicon } = createLoader()('src/api/rybbit/favicon.ts');
+  let requests = 0;
+  global.fetch = async (url, options) => {
+    requests++;
+    assert.equal(url, 'https://example.test/favicon.ico');
+    assert.equal(options.credentials, 'omit');
+    assert.deepEqual(options.headers, { Accept: 'image/*' });
+    return {
+      ok: true, headers: new Headers({ 'content-type': 'image/x-icon' }),
+      arrayBuffer: async () => Uint8Array.from([1]).buffer,
+    };
+  };
+  const signal = new AbortController().signal;
+  assert.equal(await getWebsiteFavicon('example.test', signal), 'data:image/x-icon;base64,AQ==');
+  for (const domain of ['https://example.test', 'example.test/page', 'example.test@other.test']) {
+    await assert.rejects(getWebsiteFavicon(domain, signal));
+  }
+  assert.equal(requests, 1);
+});
+
 test('site icon falls back, resets on site switch, ignores stale results and cancels on unmount', async () => {
   const pending = [];
   const { SiteIcon } = createLoader({
