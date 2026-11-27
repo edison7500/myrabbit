@@ -31,6 +31,7 @@ MyRabbit brings your [Rybbit](https://rybbit.com/) website analytics to your pho
 - **Saved date range:** Dashboard, Explore, and analytics details share the last selected preset or custom dates, restored after restarting the app. Relative presets such as Last 7 Days stay relative to the current date. The preference is kept when switching sites or replacing/removing a connection.
 - **Realtime activity:** the latest 100 sessions from the last 30 minutes, expandable visitor details, and refreshes every 30 seconds while visible and active.
 - **Cloud and self-hosted connections:** test your server URL and API key before saving, then switch between accessible sites. One saved connection is supported at a time.
+- **Website icons:** the site switcher, site list, and Settings show the website favicon when available. MyRabbit checks the configured Rybbit server first, then the site's HTTPS `/favicon.ico`. The globe appears while loading and when no usable icon is available.
 - **Appearance:** Light, Dark, or Auto to follow your device.
 - **iOS navigation:** system-native tabs stay expanded while scrolling. Health-style large navigation titles collapse into compact titles as content scrolls, with native scroll-edge materials and system accessibility support. Tap the active tab to return to the top. Lucide icons are preserved. Android keeps its existing navigation.
 - **Local credential storage:** API keys stay in SecureStore on iOS and Android. Browser previews keep credentials in memory only and require reconnecting after refresh.

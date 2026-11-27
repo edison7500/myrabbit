@@ -27,7 +27,12 @@ const Link = ({ children, ...props }) => React.createElement('Link', props, chil
 const baseMocks = { 'react-native': native, 'react-native-safe-area-context': { SafeAreaView: 'SafeAreaView', SafeAreaProvider: 'SafeAreaProvider', useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }, 'lucide-react-native': icons,
   'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, useReducedMotion: () => false },
   'expo-status-bar': { StatusBar: 'StatusBar' },
+  'expo-image': { Image: 'Image' },
   'expo-router/react-navigation': { useHeaderHeight: () => 0 },
+  '@/api/rybbit/favicon': {
+    getFavicon: async () => { throw new Error('No site favicon in this fixture'); },
+    getWebsiteFavicon: async () => { throw new Error('No site favicon in this fixture'); },
+  },
   '@/api/rybbit/client': {
     getOverview: () => Promise.reject(new Error('Inject an overview loader in component tests.')),
     getPreviousOverview: async () => null,

@@ -45,6 +45,8 @@ test('Explore navbar hosts the site switcher and date picker, validates custom d
   const Picker = Object.assign(({ children, ...props }) => React.createElement('Picker', props, children), { Item: 'PickerItem' });
   const load = createLoader({
     'react-native': native,
+    'expo-image': { Image: 'Image' },
+    '@/api/rybbit/favicon': { getWebsiteFavicon: async () => { throw new Error('No site favicon in this fixture'); } },
     'lucide-react-native': { CalendarDays: 'CalendarDays', Globe: 'Globe', ChevronDown: 'ChevronDown' },
     'expo-router': { Link: 'Link', useNavigation: path => { assert.equal(path, '/'); return navigation; }, useFocusEffect: callback => React.useEffect(callback, [callback]) },
     '@expo/ui': { Host: 'Host', Picker, RNHostView: 'RNHostView', BottomSheet: ({ isPresented, children }) => isPresented ? React.createElement('Sheet', null, children) : null },

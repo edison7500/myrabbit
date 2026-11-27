@@ -1,24 +1,26 @@
 import { createThemedStyles } from '@/constants/themed-styles';
 import { useTheme } from '@/stores/theme';
-import { ChevronRight, Globe } from 'lucide-react-native';
+import { ChevronRight } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import type { Site } from '@/api/rybbit/client';
+import { SiteIcon } from '@/components/site-icon';
 import { radii, spacing, typography } from '@/constants/theme';
 
 type Props = {
   site: Site;
+  serverUrl: string;
   current: boolean;
   disabled: boolean;
   selecting: boolean;
   onSelect: () => void;
 };
 
-export function SiteRow({ site, current, disabled, selecting, onSelect }: Props) {
+export function SiteRow({ site, serverUrl, current, disabled, selecting, onSelect }: Props) {
   const { colors, scheme } = useTheme();
   const styles = themedStyles[scheme];
   return <Pressable accessibilityRole="button" accessibilityLabel={`Open dashboard for ${site.name}`}
     disabled={disabled} onPress={onSelect} style={({ pressed }) => [styles.card, current && styles.currentCard, (pressed || disabled) && { opacity: 0.65 }]}>
-    <View style={styles.siteIcon}><Globe size={22} color={colors.accent} accessible={false} /></View>
+    <View style={styles.siteIcon}><SiteIcon serverUrl={serverUrl} domain={site.domain} size={22} /></View>
     <View style={styles.details}>
       <Text style={styles.name}>{site.name}</Text>
       <Text style={styles.body}>{site.domain}</Text>

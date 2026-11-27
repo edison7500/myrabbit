@@ -175,11 +175,12 @@ test('native confirmation explicitly describes local credentials and preserved s
 test('the real site row is an ordinary dashboard control without destructive accessibility actions', async () => {
   const load = createLoader({
     'react-native': { Pressable: 'Pressable', View: 'View', Text: 'Text', ActivityIndicator: 'ActivityIndicator', StyleSheet: { create: value => value } },
-    'lucide-react-native': { ChevronRight: 'ChevronRight', Globe: 'Globe' },
+    'lucide-react-native': { ChevronRight: 'ChevronRight' },
+    '@/components/site-icon': { SiteIcon: 'SiteIcon' },
   });
   const { SiteRow } = load('src/features/sites/site-row.tsx');
   let opens = 0; let tree;
-  await act(async () => { tree = create(React.createElement(SiteRow, { site, current: true, selecting: false, disabled: false, onSelect: () => { opens++; } })); });
+  await act(async () => { tree = create(React.createElement(SiteRow, { site, serverUrl: config.baseUrl, current: true, selecting: false, disabled: false, onSelect: () => { opens++; } })); });
   const row = tree.root.findByType('Pressable');
   assert.equal(row.props.accessibilityActions, undefined);
   assert.equal(row.props.onAccessibilityAction, undefined);

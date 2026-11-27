@@ -51,7 +51,7 @@ function ConnectedSiteSelection({ serverUrl }: { serverUrl: string }) {
           <Text accessibilityRole="header" style={styles.title}>Select a site</Text>
           <Text style={styles.body}>Choose the site you want to explore.</Text>
         </View>}
-        renderItem={({ item }) => <SiteRow site={item} current={site?.id === item.id}
+        renderItem={({ item }) => <SiteRow site={item} serverUrl={serverUrl} current={site?.id === item.id}
           disabled={selectingId !== null} selecting={selectingId === item.id}
           onSelect={async () => {
             if (busy.current) return;

@@ -8,7 +8,7 @@ import { ConnectionActions } from '@/components/connection-actions';
 import { Surface } from '@/components/analytics-ui';
 import { Screen } from '@/components/screen';
 import { spacing } from '@/constants/theme';
-import { SiteIcon } from '@/features/settings/site-icon';
+import { SiteIcon } from '@/components/site-icon';
 import { AppearanceSettings } from '@/features/settings/appearance-settings';
 
 export default function SettingsScreen() {
@@ -18,7 +18,7 @@ export default function SettingsScreen() {
   return (
     <Screen tabScreen navigationHeader title="Settings" description="Your sites. Your connection. Your control.">
       <Surface style={styles.card}>
-        <View style={styles.icon}><SiteIcon serverUrl={serverUrl} domain={site?.domain} /></View>
+        <View style={styles.icon}><SiteIcon serverUrl={serverUrl} domain={site?.domain} size={32} fallbackSize={26} /></View>
         <View style={styles.details}>
           <Text style={styles.title}>{site?.name ?? 'Rybbit connection'}</Text>
           <Text selectable style={styles.body}>{serverUrl}</Text>
