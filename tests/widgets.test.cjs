@@ -6,11 +6,18 @@ const createLoader = require('./load-source.cjs');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
 const load = createLoader();
-const { createWidgetSnapshot, isWidgetReportingContext, widgetContextKey, widgetReportDate } = load('src/features/widgets/widget-snapshot.ts');
+const { createWidgetSnapshot, widgetContextKey, widgetDateRange, widgetReportDate } = load('src/features/widgets/widget-snapshot.ts');
+const { buildPreviousAnalyticsQuery } = load('src/api/rybbit/date-range.ts');
 const { formatOverviewValue } = load('src/features/overview/overview-format.ts');
 const { metricChange } = load('src/features/overview/overview-state.ts');
 const site = { id: '1', name: 'Example', domain: 'example.test', organization: 'Org' };
-const context = (overrides = {}) => ({ serverUrl: 'https://analytics.test', siteId: site.id, dateRange: { preset: 'today' }, timeZone: 'UTC', filters: [], ...overrides });
+const today = { preset: 'today' };
+const lastSevenDays = { preset: 'last-7-days' };
+const dateRangeRequiringWidgetRequest = { preset: 'last-30-days' };
+const filter = { parameter: 'country', type: 'equals', value: ['HK'] };
+const reportDate = '2026-10-22';
+const updatedAt = Date.parse(`${reportDate}T03:00:00Z`);
+const context = (overrides = {}) => ({ serverUrl: 'https://analytics.test', siteId: site.id, dateRange: today, timeZone: 'UTC', filters: [], ...overrides });
 const values = { users: 125, sessions: 80, pageviews: 2000, pages_per_session: 2.5, bounce_rate: 40, session_duration: 90 };
 const prior = { users: 100, sessions: 100, pageviews: 1000, pages_per_session: 2, bounce_rate: 50, session_duration: 60 };
 function deferred() {
@@ -35,6 +42,7 @@ function synchronization(api = {}, bridgeOverride) {
   })('src/features/widgets/widget-sync.ts');
   function activate(query = context(), selected = site) {
     sync.setWidgetContext(query.serverUrl, selected, query.timeZone);
+    sync.setWidgetDateRange(query.dateRange);
     return result(query, selected);
   }
   function result(query = context(), selected = site) {
@@ -49,7 +57,7 @@ function synchronization(api = {}, bridgeOverride) {
 }
 
 test('widget snapshots use all six Dashboard metric values and comparison semantics', () => {
-  const snapshot = createWidgetSnapshot(context(), site, values, prior, Date.parse('2026-10-22T03:00:00Z'));
+  const snapshot = createWidgetSnapshot(today, 'UTC', site, values, prior, updatedAt, reportDate);
   assert.deepEqual(snapshot.metrics.map(metric => [metric.id, metric.label, metric.value]), [
     ['users', 'Unique Users', '125'], ['sessions', 'Sessions', '80'], ['pageviews', 'Pageviews', '2k'],
     ['pages_per_session', 'Pages per Session', '2.5'], ['bounce_rate', 'Bounce Rate', '40%'], ['session_duration', 'Session Duration', '1m 30s'],
@@ -64,10 +72,10 @@ test('widget snapshots use all six Dashboard metric values and comparison semant
 
 test('zero traffic remains real widget data while missing and zero comparison baselines stay unavailable', () => {
   const zero = Object.fromEntries(Object.keys(values).map(id => [id, 0]));
-  const snapshot = createWidgetSnapshot(context(), site, zero, zero, Date.now());
+  const snapshot = createWidgetSnapshot(today, 'UTC', site, zero, zero, updatedAt, reportDate);
   assert.deepEqual(snapshot.metrics.map(metric => metric.value), ['0', '0', '0', '0.0', '0%', '0m 0s']);
   assert.ok(snapshot.metrics.every(metric => metric.change === null));
-  const missing = createWidgetSnapshot(context(), site, { users: 7 }, null, Date.now());
+  const missing = createWidgetSnapshot(today, 'UTC', site, { users: 7 }, null, updatedAt, reportDate);
   assert.equal(missing.metrics[0].value, '7');
   assert.ok(missing.metrics.slice(1).every(metric => metric.value === '—' && metric.change === null));
   assert.equal(formatOverviewValue(Infinity, 'users'), '—');
@@ -77,30 +85,43 @@ test('zero traffic remains real widget data while missing and zero comparison ba
 
 test('shared widget payload explicitly allows display fields and excludes credentials, server URLs, filters and raw data', () => {
   const credential = 'secret-widget-test-api-key';
-  const query = context({ apiKey: credential, connection: { apiKey: credential } });
-  const selected = { ...site, apiKey: credential, serverUrl: query.serverUrl };
-  const snapshot = createWidgetSnapshot(query, selected, { ...values, credential }, prior, 1_792_635_000_000, '2026-10-22');
-  assert.deepEqual(Object.keys(snapshot).sort(), ['metrics', 'reportDate', 'siteDomain', 'siteId', 'timeZone', 'updatedAt', 'version'].sort());
+  const { serverUrl } = context();
+  const selected = { ...site, apiKey: credential, serverUrl, connection: { apiKey: credential } };
+  const range = widgetDateRange({ ...lastSevenDays, apiKey: credential });
+  const snapshot = createWidgetSnapshot(range, 'UTC', selected, { ...values, credential }, prior, updatedAt, reportDate);
+  assert.deepEqual(Object.keys(snapshot).sort(), ['dateRange', 'metrics', 'reportDate', 'siteDomain', 'siteId', 'timeZone', 'updatedAt', 'version'].sort());
+  assert.deepEqual(snapshot.dateRange, lastSevenDays);
   for (const metric of snapshot.metrics) assert.deepEqual(Object.keys(metric).sort(), ['change', 'id', 'label', 'value']);
   const json = JSON.stringify(snapshot);
-  for (const excluded of [credential, query.serverUrl, 'apiKey', 'connection', 'filters', 'organization']) assert.equal(json.includes(excluded), false);
+  for (const excluded of [credential, serverUrl, 'apiKey', 'connection', 'filters', 'organization']) assert.equal(json.includes(excluded), false);
   assert.equal(snapshot.siteDomain, site.domain);
-  assert.equal(createWidgetSnapshot(query, { ...site, domain: ' ', name: ' Fallback ' }, values, null, Date.now()).siteDomain, 'Fallback');
+  assert.equal(createWidgetSnapshot(today, 'UTC', { ...site, domain: ' ', name: ' Fallback ' }, values, null, updatedAt, reportDate).siteDomain, 'Fallback');
 });
 
-test('only Today without filters for the matching selected site can be labeled as a widget snapshot', () => {
-  const filtered = context({ filters: [{ parameter: 'country', type: 'equals', value: ['HK'] }] });
-  const older = context({ dateRange: { preset: 'yesterday' } });
-  assert.equal(isWidgetReportingContext(context()), true);
-  assert.equal(isWidgetReportingContext(filtered), false);
-  for (const query of [filtered, older, context({ siteId: 'another-site' })]) {
-    assert.equal(createWidgetSnapshot(query, site, values, prior, Date.now()), null);
-  }
-  assert.equal(createWidgetSnapshot(context(), site, {}, null, Date.now()), null);
-  assert.equal(createWidgetSnapshot(context(), site, values, prior, NaN), null);
+test('widget snapshots require analytics data and a valid timestamp', () => {
+  assert.equal(createWidgetSnapshot(today, 'UTC', site, {}, null, updatedAt, reportDate), null);
+  assert.equal(createWidgetSnapshot(today, 'UTC', site, values, prior, NaN, reportDate), null);
+});
+
+test('widget contexts distinguish connection, site and analytics timezone', () => {
   assert.notEqual(widgetContextKey('https://first.test', '1', 'UTC'), widgetContextKey('https://second.test', '1', 'UTC'));
   assert.notEqual(widgetContextKey('https://first.test', '1', 'UTC'), widgetContextKey('https://first.test', '2', 'UTC'));
   assert.notEqual(widgetContextKey('https://first.test', '1', 'UTC'), widgetContextKey('https://first.test', '1', 'Asia/Hong_Kong'));
+});
+
+test('widget date range honors supported presets and caps longer selections at seven inclusive days', () => {
+  for (const preset of ['today', 'yesterday', 'last-7-days', 'this-week', 'last-30-minutes', 'last-24-hours']) {
+    assert.deepEqual(widgetDateRange({ preset }), { preset });
+  }
+  for (const preset of ['last-30-days', 'this-month', 'this-year', 'all-time']) {
+    assert.deepEqual(widgetDateRange({ preset }), lastSevenDays);
+  }
+  const exact = { preset: 'custom', startDate: '2024-02-26', endDate: '2024-03-03' };
+  const short = { ...exact, startDate: '2024-02-29' };
+  assert.deepEqual(widgetDateRange(short), short);
+  assert.deepEqual(widgetDateRange(exact), exact);
+  assert.deepEqual(widgetDateRange({ ...exact, startDate: '2024-02-01' }), exact);
+  assert.equal(widgetDateRange({ ...exact, endDate: '2024-02-30' }), null);
 });
 
 test('widget report dates use the Dashboard analytics timezone at midnight boundaries', () => {
@@ -110,30 +131,44 @@ test('widget report dates use the Dashboard analytics timezone at midnight bound
   assert.equal(widgetReportDate('Asia/Hong_Kong', now), '2026-10-22');
 });
 
-test('Today widget sync reuses the successful Dashboard response without additional network requests', async () => {
-  const sync = synchronization(); const result = sync.activate();
-  await sync.syncDashboardWidget(result);
+test('Today and Last 7 Days reuse unfiltered Dashboard data without additional network requests', async () => {
+  const sync = synchronization();
+  sync.activate();
+  for (const dateRange of [today, lastSevenDays]) {
+    sync.setWidgetDateRange(dateRange);
+    const result = sync.result(context({ dateRange }));
+    await sync.syncDashboardWidget(result);
+    const { key, snapshot } = sync.writes.at(-1);
+    assert.deepEqual(snapshot.dateRange, dateRange);
+    assert.equal(snapshot.updatedAt, result.updatedAt);
+    assert.equal(snapshot.reportDate, widgetReportDate('UTC', new Date(result.requestedAt)));
+    assert.equal(key, widgetContextKey(result.context.serverUrl, site.id, 'UTC'));
+  }
+  assert.equal(sync.writes.length, 2);
   assert.deepEqual(sync.requests, []);
-  assert.equal(sync.writes.length, 1);
-  assert.equal(sync.writes[0].snapshot.updatedAt, result.updatedAt);
-  assert.equal(sync.writes[0].snapshot.reportDate, widgetReportDate('UTC', new Date(result.requestedAt)));
-  assert.equal(sync.writes[0].key, widgetContextKey(result.context.serverUrl, site.id, 'UTC'));
 });
 
-test('other Dashboard ranges and filters fetch one pinned Today and prior period using the same unfiltered context', async () => {
-  const filter = { parameter: 'country', type: 'equals', value: ['HK'] };
-  for (const query of [context({ dateRange: { preset: 'last-7-days' } }), context({ filters: [filter] })]) {
+test('longer or filtered Dashboard ranges fetch capped, unfiltered dates and an equal prior period', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-11-27T16:30:00Z') });
+  const timeZone = 'Asia/Hong_Kong';
+  for (const dateRange of [dateRangeRequiringWidgetRequest, lastSevenDays,
+    { preset: 'custom', startDate: '2026-11-01', endDate: '2026-11-28' }]) {
+    const query = context({ dateRange, timeZone, filters: dateRange === lastSevenDays ? [filter] : [] });
     const original = structuredClone(query);
     const sync = synchronization(); const result = sync.activate(query);
     result.overview = { users: 9999 };
     await sync.syncDashboardWidget(result);
     assert.deepEqual(sync.requests.map(([period]) => period), ['current', 'previous']);
-    const fixed = sync.requests[0][1]; const today = widgetReportDate(query.timeZone);
+    const fixed = sync.requests[0][1];
     assert.equal(sync.requests[1][1], fixed);
-    assert.deepEqual(fixed, { ...query, filters: [], dateRange: { preset: 'custom', startDate: today, endDate: today } });
+    const capped = { preset: 'custom', startDate: '2026-11-22', endDate: '2026-11-28' };
+    assert.deepEqual(fixed, { ...query, filters: [], dateRange: capped });
+    const baseline = buildPreviousAnalyticsQuery(fixed.dateRange, timeZone);
+    assert.deepEqual(Object.fromEntries(baseline), { time_zone: timeZone, start_date: '2026-11-15', end_date: '2026-11-21' });
     assert.ok(sync.requests.every(([, , signal]) => signal === result.signal));
     assert.equal(sync.writes[0].snapshot.metrics[0].value, '125');
-    assert.equal(sync.writes[0].snapshot.reportDate, today);
+    assert.equal(sync.writes[0].snapshot.reportDate, '2026-11-28');
+    assert.deepEqual(sync.writes[0].snapshot.dateRange, dateRange.preset === 'custom' ? capped : lastSevenDays);
     assert.deepEqual(query, original);
   }
 });
@@ -152,10 +187,12 @@ test('network failures preserve cached widget data and unavailable comparison da
   const sync = synchronization({ current: async () => { throw new Error('offline'); } });
   await sync.syncDashboardWidget(sync.activate());
   const cached = sync.writes[0];
-  await sync.syncDashboardWidget(sync.result(context({ dateRange: { preset: 'last-7-days' } })));
+  sync.setWidgetDateRange(dateRangeRequiringWidgetRequest);
+  await sync.syncDashboardWidget(sync.result(context({ dateRange: dateRangeRequiringWidgetRequest })));
+  assert.equal(sync.requests.length, 2);
   assert.deepEqual(sync.writes, [cached]);
   const comparison = synchronization({ previous: async () => { throw new Error('previous period unsupported'); } });
-  await comparison.syncDashboardWidget(comparison.activate(context({ dateRange: { preset: 'last-7-days' } })));
+  await comparison.syncDashboardWidget(comparison.activate(context({ dateRange: dateRangeRequiringWidgetRequest })));
   assert.equal(comparison.writes[0].snapshot.metrics[0].value, '125');
   assert.ok(comparison.writes[0].snapshot.metrics.every(metric => metric.change === null));
 });
@@ -178,7 +215,7 @@ test('native context failures still invalidate outstanding responses and a later
     writeSnapshot: (key, json) => nativeCalls.push(['snapshot', key, JSON.parse(json)]),
   });
   let result;
-  assert.doesNotThrow(() => { result = sync.activate(context({ dateRange: { preset: 'last-7-days' } })); });
+  assert.doesNotThrow(() => { result = sync.activate(context({ dateRange: dateRangeRequiringWidgetRequest })); });
   const earlierRevision = sync.currentWidgetRevision();
   const completion = sync.syncDashboardWidget(result);
   assert.doesNotThrow(() => sync.setWidgetContext('https://analytics.test', site, 'UTC'));
@@ -186,6 +223,7 @@ test('native context failures still invalidate outstanding responses and a later
   pending.resolve(values); await completion;
   assert.equal(nativeCalls.filter(([kind]) => kind === 'snapshot').length, 0);
   unavailable = false;
+  sync.setWidgetDateRange(today);
   await assert.doesNotReject(sync.syncDashboardWidget(sync.result()));
   assert.deepEqual(nativeCalls.slice(-2).map(([kind]) => kind), ['context', 'snapshot']);
   assert.equal(nativeCalls.at(-1)[2].metrics[0].value, '125');
@@ -199,7 +237,7 @@ test('aborted requests and mismatched selected sites never publish widget data',
   assert.equal(sync.writes.length, 0);
   assert.equal(sync.requests.length, 0);
   const pending = deferred(); const fetching = synchronization({ current: () => pending.promise });
-  const request = fetching.activate(context({ dateRange: { preset: 'last-7-days' } }));
+  const request = fetching.activate(context({ dateRange: dateRangeRequiringWidgetRequest }));
   const cancellation = new AbortController(); request.signal = cancellation.signal;
   const completion = fetching.syncDashboardWidget(request);
   cancellation.abort(); pending.resolve(values); await completion;
@@ -216,7 +254,7 @@ test('site, timezone and reconnect revisions prevent outstanding responses from 
   ];
   for (const change of changes) {
     const pending = deferred(); const sync = synchronization({ current: () => pending.promise });
-    const result = sync.activate(context({ dateRange: { preset: 'last-7-days' } }));
+    const result = sync.activate(context({ dateRange: dateRangeRequiringWidgetRequest }));
     const completion = sync.syncDashboardWidget(result);
     change(sync); pending.resolve(values); await completion;
     assert.equal(sync.writes.length, 0);
@@ -229,7 +267,7 @@ test('site, timezone and reconnect revisions prevent outstanding responses from 
 test('a slower earlier Dashboard sync cannot overwrite a newer successful snapshot', async () => {
   const earlier = deferred(); const later = deferred(); let calls = 0;
   const sync = synchronization({ current: () => (++calls === 1 ? earlier : later).promise });
-  const result = sync.activate(context({ dateRange: { preset: 'last-7-days' } }));
+  const result = sync.activate(context({ dateRange: dateRangeRequiringWidgetRequest }));
   const first = sync.syncDashboardWidget(result); const second = sync.syncDashboardWidget(sync.result(result.context));
   later.resolve({ ...values, users: 222 }); await second;
   earlier.resolve({ ...values, users: 111 }); await first;
@@ -237,7 +275,28 @@ test('a slower earlier Dashboard sync cannot overwrite a newer successful snapsh
   assert.equal(sync.writes[0].snapshot.metrics[0].value, '222');
 });
 
-test('widget deep links wait for startup restoration then reset a warm Dashboard to Today with no filters', async () => {
+test('changing the selected period outside Dashboard cancels its prior widget request and ignores old Dashboard data', async () => {
+  const pending = deferred();
+  let requests = 0;
+  const sync = synchronization({ current: () => ++requests === 1 ? pending.promise : Promise.resolve({ ...values, users: 234 }) });
+  const oldDashboard = sync.activate();
+  sync.setWidgetDateRange(lastSevenDays, { context: context({ dateRange: lastSevenDays }), site });
+  const oldSignal = sync.requests[0][2];
+  assert.equal(oldSignal.aborted, false);
+
+  const yesterday = { preset: 'yesterday' };
+  sync.setWidgetDateRange(yesterday, { context: context({ dateRange: yesterday }), site });
+  assert.equal(oldSignal.aborted, true);
+  pending.resolve({ ...values, users: 999 });
+  await sync.syncDashboardWidget(oldDashboard);
+  await pending.promise;
+
+  assert.equal(sync.writes.length, 1);
+  assert.deepEqual(sync.writes[0].snapshot.dateRange, yesterday);
+  assert.equal(sync.writes[0].snapshot.metrics[0].value, '234');
+});
+
+test('widget deep links wait for startup restoration and open Dashboard with its chosen date range', async () => {
   let session = { ready: false, serverUrl: 'https://analytics.test', site };
   const changes = []; const targets = [];
   const Entry = createLoader({
@@ -255,7 +314,7 @@ test('widget deep links wait for startup restoration then reset a warm Dashboard
   assert.equal(tree.toJSON(), null); assert.deepEqual(changes, []); assert.deepEqual(targets, []);
   session = { ...session, ready: true };
   await act(async () => tree.update(React.createElement(Entry)));
-  assert.deepEqual(changes, [['range', { preset: 'today' }], ['filters', []]]);
+  assert.deepEqual(changes, [['filters', []]]);
   assert.equal(tree.root.findByType('Redirect').props.href, '/(tabs)/overview');
   await act(async () => tree.unmount());
 });

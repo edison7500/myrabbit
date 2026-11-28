@@ -44,7 +44,7 @@ function zonedDate(now: Date, timeZone: string) {
   return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-function shiftDate(value: string, days: number) {
+export function shiftDate(value: string, days: number) {
   const [year, month, day] = value.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day + days));
   return date.toISOString().slice(0, 10);

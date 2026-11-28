@@ -34,45 +34,139 @@ struct WidgetMetric: Codable, Identifiable {
   let change: Change?
 }
 
+struct WidgetDateRange: Codable, Equatable {
+  enum Preset: String, Codable {
+    case today, yesterday, custom
+    case last7Days = "last-7-days"
+    case thisWeek = "this-week"
+    case last30Minutes = "last-30-minutes"
+    case last24Hours = "last-24-hours"
+  }
+
+  enum Window {
+    case dates(start: String, end: String)
+    case minutes(start: Int, end: Int)
+
+    var queryItems: [URLQueryItem] {
+      switch self {
+      case let .dates(start, end):
+        return [
+          URLQueryItem(name: "start_date", value: start),
+          URLQueryItem(name: "end_date", value: end),
+        ]
+      case let .minutes(start, end):
+        return [
+          URLQueryItem(name: "past_minutes_start", value: String(start)),
+          URLQueryItem(name: "past_minutes_end", value: String(end)),
+        ]
+      }
+    }
+  }
+
+  let preset: Preset
+  let startDate: String?
+  let endDate: String?
+
+  static let today = Self(preset: .today, startDate: nil, endDate: nil)
+
+  func windows(anchoredTo reportDate: String) -> (current: Window, previous: Window)? {
+    // The anchor already represents the analytics timezone's date. Treat date
+    // literals as UTC for calendar arithmetic, including across DST transitions.
+    let formatter = WidgetSnapshot.reportingDateFormatter(timeZone: .gmt)
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .gmt
+    guard preset == .custom || (startDate == nil && endDate == nil),
+          let anchor = WidgetSnapshot.parseReportingDate(reportDate, with: formatter) else { return nil }
+
+    func shift(_ date: Date, by days: Int) -> Date {
+      date.addingTimeInterval(Double(days) * 86_400)
+    }
+
+    let start: Date
+    let end: Date
+    switch preset {
+    case .last30Minutes:
+      return (.minutes(start: 30, end: 0), .minutes(start: 60, end: 30))
+    case .last24Hours:
+      return (.minutes(start: 1440, end: 0), .minutes(start: 2880, end: 1440))
+    case .today:
+      start = anchor
+      end = anchor
+    case .yesterday:
+      start = shift(anchor, by: -1)
+      end = start
+    case .last7Days:
+      start = shift(anchor, by: -6)
+      end = anchor
+    case .thisWeek:
+      let weekday = calendar.component(.weekday, from: anchor)
+      let daysSinceMonday = weekday == 1 ? 6 : weekday - 2
+      start = shift(anchor, by: -daysSinceMonday)
+      end = shift(start, by: 6)
+    case .custom:
+      guard let startDate, let endDate,
+            let fixedStart = WidgetSnapshot.parseReportingDate(startDate, with: formatter),
+            let fixedEnd = WidgetSnapshot.parseReportingDate(endDate, with: formatter) else { return nil }
+      start = fixedStart
+      end = fixedEnd
+    }
+
+    let days = calendar.dateComponents([.day], from: start, to: end).day ?? -1
+    guard (0...6).contains(days) else { return nil }
+    let previousStart = shift(start, by: -(days + 1))
+    let previousEnd = shift(start, by: -1)
+    return (
+      .dates(start: formatter.string(from: start), end: formatter.string(from: end)),
+      .dates(start: formatter.string(from: previousStart), end: formatter.string(from: previousEnd))
+    )
+  }
+}
+
 struct WidgetSnapshot: Codable {
   let version: Int
   let siteId: String
   let siteDomain: String
   let reportDate: String
+  let dateRange: WidgetDateRange?
   let timeZone: String
   let updatedAt: Double
   let metrics: [WidgetMetric]
 
   var updatedDate: Date { Date(timeIntervalSince1970: updatedAt / 1_000) }
+  var reportingRange: WidgetDateRange { dateRange ?? .today }
 
   static func reportingDate(_ date: Date, timeZone: String) -> String {
+    reportingDateFormatter(timeZone: TimeZone(identifier: timeZone) ?? .gmt).string(from: date)
+  }
+
+  fileprivate static func reportingDateFormatter(timeZone: TimeZone) -> DateFormatter {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.calendar = Calendar(identifier: .gregorian)
-    formatter.timeZone = TimeZone(identifier: timeZone) ?? .gmt
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timeZone
+    formatter.calendar = calendar
+    formatter.timeZone = timeZone
+    formatter.gregorianStartDate = .distantPast
     formatter.dateFormat = "yyyy-MM-dd"
-    return formatter.string(from: date)
+    formatter.isLenient = false
+    return formatter
+  }
+
+  fileprivate static func parseReportingDate(_ value: String, with formatter: DateFormatter) -> Date? {
+    guard value.range(of: #"^[0-9]{4}-[0-9]{2}-[0-9]{2}$"#, options: .regularExpression) != nil,
+          let day = formatter.date(from: value), formatter.string(from: day) == value else { return nil }
+    return day
   }
 
   func validated(at date: Date = Date()) throws -> WidgetSnapshot {
     guard version == 1,
       Self.validText(siteId, maximum: 128), Self.validText(siteDomain, maximum: 256),
       Self.validText(timeZone, maximum: 128), TimeZone(identifier: timeZone) != nil,
-      reportDate.range(of: #"^\d{4}-\d{2}-\d{2}$"#, options: .regularExpression) != nil,
       updatedAt.isFinite, updatedAt > 0, updatedDate <= date.addingTimeInterval(300),
+      reportingRange.windows(anchoredTo: reportDate) != nil,
       metrics.count == WidgetConstants.metricIDs.count,
       Set(metrics.map(\.id)) == Set(WidgetConstants.metricIDs)
     else { throw WidgetStorageError.invalidSnapshot }
-
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.calendar = Calendar(identifier: .gregorian)
-    formatter.timeZone = TimeZone(identifier: timeZone)
-    formatter.dateFormat = "yyyy-MM-dd"
-    formatter.isLenient = false
-    guard let reportDay = formatter.date(from: reportDate), formatter.string(from: reportDay) == reportDate else {
-      throw WidgetStorageError.invalidSnapshot
-    }
 
     for metric in metrics {
       guard Self.validText(metric.label, maximum: 48), Self.validText(metric.value, maximum: 48) else {
@@ -99,7 +193,7 @@ enum WidgetStorageError: LocalizedError {
     switch self {
     case .unavailable: return "Widget shared storage is unavailable."
     case .invalidSnapshot: return "The widget snapshot is invalid."
-    case .contextChanged: return "The active widget site changed before this snapshot was saved."
+    case .contextChanged: return "The active widget changed before this snapshot was saved."
     }
   }
 }
@@ -214,7 +308,8 @@ enum WidgetSnapshotStore {
       guard var current = try readEnvelope(), current.contextDigest == contextDigest else {
         throw WidgetStorageError.contextChanged
       }
-      if let existing = current.snapshot, existing.updatedAt > snapshot.updatedAt { return }
+      if let existing = current.snapshot, existing.reportingRange == snapshot.reportingRange,
+         existing.updatedAt > snapshot.updatedAt { return }
       if current.snapshot?.siteDomain != snapshot.siteDomain { current.favicon = nil }
       current.snapshot = snapshot
       try save(current)
@@ -226,7 +321,8 @@ enum WidgetSnapshotStore {
     try withWriteLock {
       guard var current = try readEnvelope(), current.refreshID == id,
             let previous = current.snapshot, previous.siteId == snapshot.siteId,
-            previous.siteDomain == snapshot.siteDomain else { throw WidgetStorageError.contextChanged }
+            previous.siteDomain == snapshot.siteDomain, previous.reportingRange == snapshot.reportingRange
+      else { throw WidgetStorageError.contextChanged }
       guard previous.updatedDate <= startedAt else { return }
       current.snapshot = snapshot
       try save(current)

@@ -37,14 +37,10 @@ enum WidgetRefreshError: LocalizedError {
 
 enum WidgetAnalytics {
   static func refresh(_ snapshot: WidgetSnapshot, using credential: WidgetRefreshCredential, now: Date) async throws -> WidgetSnapshot {
-    guard let zone = TimeZone(identifier: snapshot.timeZone) else { throw WidgetRefreshError.invalidResponse }
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = zone
-    guard let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)) else {
+    let reportDate = WidgetSnapshot.reportingDate(now, timeZone: snapshot.timeZone)
+    guard let windows = snapshot.reportingRange.windows(anchoredTo: reportDate) else {
       throw WidgetRefreshError.invalidResponse
     }
-    let today = WidgetSnapshot.reportingDate(now, timeZone: snapshot.timeZone)
-    let prior = WidgetSnapshot.reportingDate(yesterday, timeZone: snapshot.timeZone)
     let config = URLSessionConfiguration.ephemeral
     config.httpShouldSetCookies = false
     config.httpCookieStorage = nil
@@ -54,12 +50,12 @@ enum WidgetAnalytics {
     let session = URLSession(configuration: config, delegate: RejectAnalyticsRedirects(), delegateQueue: nil)
     defer { session.invalidateAndCancel() }
 
-    async let previous = try? overview(session, snapshot, credential, date: prior)
-    let current = try await overview(session, snapshot, credential, date: today)
+    async let previous = try? overview(session, snapshot, credential, window: windows.previous)
+    let current = try await overview(session, snapshot, credential, window: windows.current)
     let baseline = await previous ?? [:]
     guard !current.isEmpty else { throw WidgetRefreshError.invalidResponse }
-    return WidgetSnapshot(version: 1, siteId: snapshot.siteId, siteDomain: snapshot.siteDomain, reportDate: today,
-                          timeZone: snapshot.timeZone, updatedAt: Date().timeIntervalSince1970 * 1_000,
+    return WidgetSnapshot(version: 1, siteId: snapshot.siteId, siteDomain: snapshot.siteDomain, reportDate: reportDate,
+                          dateRange: snapshot.dateRange, timeZone: snapshot.timeZone, updatedAt: Date().timeIntervalSince1970 * 1_000,
                           metrics: snapshot.metrics.map { metric in
       let value = current[metric.id]
       return WidgetMetric(id: metric.id, label: metric.label, value: format(value, metric: metric.id),
@@ -67,7 +63,7 @@ enum WidgetAnalytics {
     })
   }
 
-  static func request(_ snapshot: WidgetSnapshot, _ credential: WidgetRefreshCredential, date: String) throws -> URLRequest {
+  static func request(_ snapshot: WidgetSnapshot, _ credential: WidgetRefreshCredential, window: WidgetDateRange.Window) throws -> URLRequest {
     let safeSegment = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
     guard var url = URLComponents(string: credential.serverUrl),
           let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme),
@@ -77,11 +73,7 @@ enum WidgetAnalytics {
           credential.apiKey.rangeOfCharacter(from: .newlines) == nil else { throw WidgetRefreshError.notReady }
     let path = url.percentEncodedPath
     url.percentEncodedPath = (path.hasSuffix("/") ? String(path.dropLast()) : path) + "/api/sites/\(site)/overview"
-    url.queryItems = [
-      URLQueryItem(name: "start_date", value: date),
-      URLQueryItem(name: "end_date", value: date),
-      URLQueryItem(name: "time_zone", value: snapshot.timeZone),
-    ]
+    url.queryItems = window.queryItems + [URLQueryItem(name: "time_zone", value: snapshot.timeZone)]
     guard let endpoint = url.url else { throw WidgetRefreshError.notReady }
     var request = URLRequest(url: endpoint, cachePolicy: .reloadIgnoringLocalCacheData)
     request.httpShouldHandleCookies = false
@@ -91,8 +83,8 @@ enum WidgetAnalytics {
   }
 
   private static func overview(_ session: URLSession, _ snapshot: WidgetSnapshot,
-                               _ credential: WidgetRefreshCredential, date: String) async throws -> [String: Double] {
-    let (data, response) = try await session.data(for: request(snapshot, credential, date: date))
+                               _ credential: WidgetRefreshCredential, window: WidgetDateRange.Window) async throws -> [String: Double] {
+    let (data, response) = try await session.data(for: request(snapshot, credential, window: window))
     switch (response as? HTTPURLResponse)?.statusCode {
     case 200: return try decodeOverview(data)
     case 401: throw WidgetRefreshError.unauthorized

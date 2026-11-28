@@ -1,11 +1,17 @@
 import type { OverviewMetric } from '@/api/rybbit/client';
+import type { AnalyticsDateRange } from '@/api/rybbit/date-range';
 import type { metricChange } from '@/features/overview/overview-state';
+
+export type WidgetDateRange =
+  | { preset: 'today' | 'yesterday' | 'last-7-days' | 'this-week' | 'last-30-minutes' | 'last-24-hours' }
+  | Extract<AnalyticsDateRange, { preset: 'custom' }>;
 
 export type WidgetSnapshot = {
   version: 1;
   siteId: string;
   siteDomain: string;
   reportDate: string;
+  dateRange: WidgetDateRange;
   timeZone: string;
   updatedAt: number;
   metrics: {

@@ -5,7 +5,7 @@ import { getSites, type Site } from '@/api/rybbit/client';
 import { clearConnection, loadConnection } from '@/storage/connection';
 import { loadDateRange, saveDateRange } from '@/storage/date-range';
 import { clearSelectedSite, restoreSelectedSite, saveSelectedSite } from '@/storage/selected-site';
-import { setWidgetContext } from '@/features/widgets/widget-sync';
+import { setWidgetContext, setWidgetDateRange } from '@/features/widgets/widget-sync';
 
 type Session = {
   ready: boolean;
@@ -15,7 +15,7 @@ type Session = {
   timeZone: string;
   filters: readonly AnalyticsFilter[];
   analyticsContext: AnalyticsQueryContext | null;
-  selectDateRange: (range: AnalyticsDateRange) => void;
+  selectDateRange: (range: AnalyticsDateRange, options?: { syncFromDashboard: boolean }) => void;
   selectTimeZone: (timeZone: string) => void;
   selectFilters: (filters: readonly AnalyticsFilter[]) => void;
   selectSite: (site: Site) => Promise<void>;
@@ -42,6 +42,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       ]);
       if (!active) return;
       setDateRange(restoredDateRange);
+      setWidgetDateRange(restoredDateRange);
       if (!config?.apiKey.trim()) { setWidgetContext(null, null, restoredTimeZone); return; }
       setServerUrl(config.baseUrl);
       const restored = await restoreSelectedSite(config.baseUrl, getSites, controller.signal);
@@ -51,10 +52,14 @@ export function SessionProvider({ children }: PropsWithChildren) {
     return () => { active = false; controller.abort(); };
   }, []);
 
-  const selectDateRange = useCallback((range: AnalyticsDateRange) => {
+  const selectDateRange = useCallback((range: AnalyticsDateRange, options?: { syncFromDashboard: boolean }) => {
+    const selection = serverUrl && site && !options?.syncFromDashboard ? {
+      context: { serverUrl, siteId: site.id, dateRange: range, timeZone, filters: [] }, site,
+    } : undefined;
+    setWidgetDateRange(range, selection);
     setDateRange(range);
     void saveDateRange(range).catch(() => {});
-  }, []);
+  }, [serverUrl, site, timeZone]);
 
   const selectSite = useCallback(async (nextSite: Site) => {
     if (!serverUrl) throw new Error('Configure your Rybbit connection first.');

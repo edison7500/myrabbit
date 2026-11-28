@@ -109,7 +109,7 @@ export function Dashboard({ loadOverview = getOverview, loadPreviousOverview = g
     setError('');
     setLoading(true);
     setRefreshing(false);
-    selectDateRange(nextRange);
+    selectDateRange(nextRange, { syncFromDashboard: true });
   }
 
   const rangeName = dateRangeLabel(range);

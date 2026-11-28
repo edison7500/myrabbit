@@ -46,7 +46,7 @@ async function session(store, { loadConnection = async () => config } = {}) {
       restoreSelectedSite: async () => site,
       saveSelectedSite: async () => {}, clearSelectedSite: async () => {},
     },
-    '@/features/widgets/widget-sync': { setWidgetContext: () => {} },
+    '@/features/widgets/widget-sync': { setWidgetContext() {}, setWidgetDateRange() {} },
   });
   const { SessionProvider, useSession } = load('src/stores/session.tsx');
   function Probe() { current = useSession(); return null; }

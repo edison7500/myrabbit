@@ -1,10 +1,14 @@
 import { getOverview, getPreviousOverview, type Overview, type Site } from '@/api/rybbit/client';
 import type { AnalyticsQueryContext } from '@/api/rybbit/analytics-context';
+import { buildAnalyticsQuery, type AnalyticsDateRange } from '@/api/rybbit/date-range';
 import { getFavicon, getWebsiteFavicon } from '@/api/rybbit/favicon';
 import { saveWidgetRefreshCredential, widgetBridge } from './native-widget';
-import { createWidgetSnapshot, isWidgetReportingContext, widgetContextKey, widgetReportDate } from './widget-snapshot';
+import { createWidgetSnapshot, sameDateRange, widgetContextKey, widgetDateRange, widgetReportDate } from './widget-snapshot';
+import type { WidgetDateRange } from './widget-types';
 
 let activeContext: string | null = null;
+let selectedDateRange: WidgetDateRange = { preset: 'today' };
+let rangeRequest: AbortController | undefined;
 let revision = 0;
 let requestSequence = 0;
 let savedFavicon: string | undefined;
@@ -15,12 +19,30 @@ export function setWidgetContext(serverUrl: string | null, site: Site | null, ti
   const next = serverUrl && site ? widgetContextKey(serverUrl, site.id, timeZone) : null;
   activeContext = next;
   revision++;
+  rangeRequest?.abort();
+  rangeRequest = undefined;
   savedFavicon = undefined;
   faviconRequest?.abort();
   faviconRequest = undefined;
   try { widgetBridge?.setContext(next); } catch {
     // Widget storage is optional. Invalidate pending app writes even if the
     // shared container is temporarily unavailable, and retry on the next sync.
+  }
+}
+
+export function setWidgetDateRange(range: AnalyticsDateRange, selection?: { context: AnalyticsQueryContext; site: Site }) {
+  const next = widgetDateRange(range);
+  if (!next || sameDateRange(next, selectedDateRange)) return;
+  selectedDateRange = next;
+  requestSequence++;
+  rangeRequest?.abort();
+  rangeRequest = undefined;
+  if (widgetBridge && selection) {
+    const controller = new AbortController();
+    rangeRequest = controller;
+    void syncWidget(selection.context, selection.site, controller.signal, revision).finally(() => {
+      if (rangeRequest === controller) rangeRequest = undefined;
+    });
   }
 }
 
@@ -73,26 +95,34 @@ type DashboardResult = {
   widgetRevision: number;
 };
 
-// This is deliberately best effort: widget storage must not turn a successful
-// Dashboard request into a network error, or discard a previous good snapshot.
-export async function syncDashboardWidget(result: DashboardResult) {
-  if (!widgetBridge) return;
-  const { context, site, signal } = result;
+export function syncDashboardWidget(result: DashboardResult) {
+  return syncWidget(result.context, result.site, result.signal, result.widgetRevision, result);
+}
+
+async function syncWidget(context: AnalyticsQueryContext, site: Site, signal: AbortSignal, version: number, dashboard?: DashboardResult) {
+  if (!widgetBridge || site.id !== context.siteId) return;
   const key = widgetContextKey(context.serverUrl, context.siteId, context.timeZone);
-  const version = result.widgetRevision;
   if (activeContext !== key || revision !== version || signal.aborted) return;
+  const range = widgetDateRange(context.dateRange);
+  if (!range || !sameDateRange(range, selectedDateRange)) return;
   const sequence = ++requestSequence;
   const isCurrent = () => !signal.aborted && revision === version && activeContext === key && sequence === requestSequence;
   try {
-    let { overview, previous, updatedAt } = result;
-    let reportDate = widgetReportDate(context.timeZone, new Date(result.requestedAt));
-    const today = widgetReportDate(context.timeZone, new Date());
-    // Other Dashboard ranges and filters must never be labeled Today in a widget.
-    // Reuse the existing API client with a pinned calendar day for both requests.
-    if (!isWidgetReportingContext(context) || reportDate !== today) {
-      reportDate = today;
+    const now = new Date();
+    const reportDate = widgetReportDate(context.timeZone, now);
+    let overview: Overview;
+    let previous: Overview | null;
+    let updatedAt: number;
+    if (dashboard && context.filters.length === 0 && sameDateRange(context.dateRange, range) &&
+        widgetReportDate(context.timeZone, new Date(dashboard.requestedAt)) === reportDate) {
+      ({ overview, previous, updatedAt } = dashboard);
+    } else {
+      // Pin calendar ranges so both requests use the same bounds across midnight.
+      const query = buildAnalyticsQuery(range, context.timeZone, now);
+      const startDate = query.get('start_date');
+      const endDate = query.get('end_date');
       const widgetQuery: AnalyticsQueryContext = {
-        ...context, filters: [], dateRange: { preset: 'custom', startDate: today, endDate: today },
+        ...context, filters: [], dateRange: startDate && endDate ? { preset: 'custom', startDate, endDate } : range,
       };
       const [currentResult, priorResult] = await Promise.allSettled([
         getOverview(widgetQuery, signal), getPreviousOverview(widgetQuery, signal),
@@ -103,7 +133,7 @@ export async function syncDashboardWidget(result: DashboardResult) {
       updatedAt = Date.now();
     }
     if (!isCurrent()) return;
-    const snapshot = createWidgetSnapshot({ ...context, filters: [], dateRange: { preset: 'today' } }, site, overview, previous, updatedAt, reportDate);
+    const snapshot = createWidgetSnapshot(range, context.timeZone, site, overview, previous, updatedAt, reportDate);
     if (snapshot) {
       widgetBridge.setContext(key);
       widgetBridge.writeSnapshot(key, JSON.stringify(snapshot));

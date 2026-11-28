@@ -153,11 +153,15 @@ struct DashboardWidgetView: View {
   }
 
   private func footer(_ snapshot: WidgetSnapshot) -> some View {
+    let entryDate = WidgetSnapshot.reportingDate(entry.date, timeZone: snapshot.timeZone)
     let formatter = DateFormatter()
     formatter.timeZone = TimeZone(identifier: snapshot.timeZone)
+    if WidgetSnapshot.reportingDate(snapshot.updatedDate, timeZone: snapshot.timeZone) != entryDate {
+      formatter.dateStyle = .short
+    }
     formatter.timeStyle = .short
-    let isToday = snapshot.reportDate == WidgetSnapshot.reportingDate(entry.date, timeZone: snapshot.timeZone)
     let timestamp = formatter.string(from: snapshot.updatedDate)
+    let period = reportingPeriod(snapshot, on: entryDate)
 
     return HStack(spacing: 4) {
       Text("Updated \(timestamp)")
@@ -165,13 +169,31 @@ struct DashboardWidgetView: View {
         .minimumScaleFactor(0.7)
         .accessibilityLabel("Last successful update \(timestamp)")
       Spacer(minLength: 0)
-      Text(isToday ? "Today" : snapshot.reportDate)
+      Text(period.display)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
-        .accessibilityLabel("Reporting period: \(isToday ? "Today" : snapshot.reportDate)")
+        .accessibilityLabel("Reporting period: \(period.accessibility)")
     }
     .font(.system(size: family == .systemSmall ? 9 : 10))
     .foregroundStyle(WidgetColors.muted)
+  }
+
+  private func reportingPeriod(_ snapshot: WidgetSnapshot, on entryDate: String) -> (display: String, accessibility: String) {
+    let range = snapshot.reportingRange
+    let isCurrent = snapshot.reportDate == entryDate
+    switch range.preset {
+    case .today where isCurrent: return ("Today", "Today")
+    case .yesterday where isCurrent: return ("Yesterday", "Yesterday")
+    case .last7Days where isCurrent: return ("Last 7 Days", "Last 7 Days")
+    case .thisWeek where isCurrent: return ("This Week", "This Week")
+    case .last30Minutes: return ("Last 30 Min", "Last 30 Minutes")
+    case .last24Hours: return ("Last 24 Hrs", "Last 24 Hours")
+    default:
+      guard let window = range.windows(anchoredTo: snapshot.reportDate)?.current,
+            case let .dates(start, end) = window else { return (snapshot.reportDate, snapshot.reportDate) }
+      if start == end { return (start, start) }
+      return ("\(start.dropFirst(5))–\(end.dropFirst(5))", "\(start) to \(end)")
+    }
   }
 
   private var emptyState: some View {
@@ -180,7 +202,7 @@ struct DashboardWidgetView: View {
       Text(entry.hasContext ? "Waiting for analytics" : "Choose a site")
         .font(.headline)
         .lineLimit(3)
-      Text(entry.hasContext ? "Open the app to load Today’s metrics." : "Open the app and select a website.")
+      Text(entry.hasContext ? "Open the app to load analytics." : "Open the app and select a website.")
         .font(.caption)
         .foregroundStyle(WidgetColors.muted)
         .lineLimit(4)
@@ -309,7 +331,7 @@ struct MyRabbitDashboardWidget: Widget {
       DashboardWidgetView(entry: entry)
     }
     .configurationDisplayName("Dashboard Metrics")
-    .description("Today’s analytics for the last site opened in MyRabbit.")
+    .description("Up to seven days of analytics for the selected MyRabbit site.")
     .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
   }
 }
@@ -318,7 +340,7 @@ extension WidgetSnapshot {
   static var preview: WidgetSnapshot {
     WidgetSnapshot(
       version: 1, siteId: "preview", siteDomain: "example.com",
-      reportDate: reportingDate(Date(), timeZone: "UTC"), timeZone: "UTC",
+      reportDate: reportingDate(Date(), timeZone: "UTC"), dateRange: nil, timeZone: "UTC",
       updatedAt: Date().timeIntervalSince1970 * 1_000,
       metrics: [
         WidgetMetric(id: "users", label: "Unique Users", value: "15.8k", change: .init(percent: 12.4, direction: .up, tone: .positive)),

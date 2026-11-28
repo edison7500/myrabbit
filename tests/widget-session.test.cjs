@@ -8,10 +8,10 @@ global.IS_REACT_ACT_ENVIRONMENT = true;
 const site = { id: '1', name: 'Example', domain: 'example.test', organization: 'Org' };
 const serverUrl = 'https://analytics.test';
 
-async function session({ saved = true, restoreSite = site, widgetFailure = false } = {}) {
-  const contexts = []; let current;
+async function session({ saved = true, restoreSite = site, widgetFailure = false, restoredRange = { preset: 'today' } } = {}) {
+  const contexts = []; const ranges = []; let current;
   const load = createLoader({
-    '@/storage/date-range': { loadDateRange: async () => ({ preset: 'today' }), saveDateRange: async () => {} },
+    '@/storage/date-range': { loadDateRange: async () => restoredRange, saveDateRange: async () => {} },
     '@/api/rybbit/client': { getSites: async () => [site] },
     '@/storage/connection': {
       loadConnection: async () => saved ? { baseUrl: serverUrl, apiKey: 'private-key' } : null,
@@ -23,13 +23,16 @@ async function session({ saved = true, restoreSite = site, widgetFailure = false
     },
     '@/features/widgets/widget-sync': widgetFailure ? createLoader({ '@/api/rybbit/client': {}, './native-widget': { widgetBridge: {
       setContext: () => { throw new Error('Shared container unavailable'); }, writeSnapshot: () => {},
-    } } })('src/features/widgets/widget-sync.ts') : { setWidgetContext: (...context) => contexts.push(context) },
+    } } })('src/features/widgets/widget-sync.ts') : {
+      setWidgetContext: (...context) => contexts.push(context),
+      setWidgetDateRange: (...range) => ranges.push(range),
+    },
   });
   const { SessionProvider, useSession } = load('src/stores/session.tsx');
   function Probe() { current = useSession(); return null; }
   let tree;
   await act(async () => { tree = create(React.createElement(SessionProvider, null, React.createElement(Probe))); });
-  return { get current() { return current; }, contexts, async unmount() { await act(async () => tree.unmount()); } };
+  return { get current() { return current; }, contexts, ranges, async unmount() { await act(async () => tree.unmount()); } };
 }
 
 test('restored site, site changes and timezone changes select the matching widget context', async () => {
@@ -43,6 +46,23 @@ test('restored site, site changes and timezone changes select the matching widge
   assert.deepEqual(view.contexts.at(-1), [serverUrl, nextSite, 'Asia/Hong_Kong']);
   assert.doesNotMatch(JSON.stringify(view.contexts), /private-key/);
   await view.unmount();
+});
+
+test('startup restores the widget period and date changes can refresh without Dashboard', async t => {
+  const restoredRange = { preset: 'last-7-days' };
+  const view = await session({ restoredRange }); t.after(view.unmount);
+  assert.deepEqual(view.ranges, [[restoredRange]]);
+
+  const dateRange = { preset: 'last-30-days' };
+  await act(async () => view.current.selectDateRange(dateRange));
+  assert.deepEqual(view.ranges.at(-1), [dateRange, {
+    context: { serverUrl, siteId: site.id, dateRange, timeZone: view.current.timeZone, filters: [] }, site,
+  }]);
+  assert.deepEqual(view.current.dateRange, dateRange);
+
+  const nextRange = { preset: 'yesterday' };
+  await act(async () => view.current.selectDateRange(nextRange, { syncFromDashboard: true }));
+  assert.deepEqual(view.ranges.at(-1), [nextRange, undefined]);
 });
 
 test('missing local connection or missing restored site invalidates cached widget data', async () => {
